@@ -124,3 +124,6 @@ dmypy.json
 
 # PyCharm
 .idea/
+
+# Rolly config
+/rolly.conf
