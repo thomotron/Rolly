@@ -1,4 +1,5 @@
 #!/bin/python3
+import re
 import discord
 from argparse import ArgumentParser
 from configparser import ConfigParser
@@ -128,6 +129,28 @@ def contains_other(str_a, str_b):
     :return: True if one contains the other, otherwise false
     """
     return (str_a.strip().lower() in str_b.strip().lower()) or (str_b.strip().lower() in str_a.strip().lower())
+
+def parse_a1_coords(a1):
+    """
+    Parses an A1 string and returns the coordinates as integers
+    Does not accept ranges
+    :param a1: A1 string to parse
+    :return: x and y coordinates as a list
+    """
+    if ':' in a1:
+        raise ValueError('Cannot process an A1 range.')
+
+    match = re.match(r"(?:\w+!)?(([A-Z]+)([0-9]+))", a1, re.I)
+    if match:
+        items = match.groups()
+        if items.count == 3:
+            # return items[2:3]
+            colNameToNum = lambda cn: sum([((ord(cn[-1 - pos]) - 64) * 26 ** pos) for pos in range(len(cn))])
+            return colNameToNum(items[2]), int(items[3]) - 1
+        else:
+            raise ValueError('Got more parts than expected.')
+    else:
+        raise ValueError('Unable to process A1 string properly, are you sure it is valid?')
 
 
 def sheet_update_user(name, colour_hex):
