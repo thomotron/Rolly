@@ -259,8 +259,9 @@ async def on_message(message):
     # Filter what command came through
     if message.content.startswith('#rolly'):
         await setup(message.channel)
-    else:
-        return
+
+    # Delete the command message
+    await message.delete()
 
 @rolly_discord.event
 async def on_raw_reaction_add(event):
