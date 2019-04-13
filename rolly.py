@@ -288,19 +288,6 @@ async def on_raw_reaction_add(event):
         finally:
             sheet_update_user(user.display_name, reaction_colours[emoji])
 
-
-@rolly_discord.event
-async def on_reaction_add(reaction, user):
-    if reaction.message.author.id != discord_id:
-        # print(DISCORD_PREFIX + 'Got react for someone else\'s message')
-        return
-
-    global reaction_colours
-    if reaction_colours[reaction.emoji]:
-        print(DISCORD_PREFIX + '{} reacted with {}, changing their cell to {}'.format(user.name, reaction.emoji, reaction_colours[reaction.emoji]))
-    else:
-        print(DISCORD_PREFIX + '{} reacted with unsupported emoji {}'.format(reaction.user.name, reaction.emoji))
-
 ##### Start the Discord bot ############################################################################################
 
 rolly_discord.run(discord_bot_token)
