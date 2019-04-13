@@ -78,7 +78,7 @@ google_id = config['Google']['client_id']
 google_secret = config['Google']['client_secret']
 google_redirect = config['Google']['redirect_url']
 google_sheet_id = config['Google']['sheet_id']
-google_sheet_range = config['Google']['sheet_ranges']
+google_sheet_ranges = config['Google']['sheet_ranges']
 
 discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
@@ -159,32 +159,44 @@ def sheet_update_user(name, colour_hex):
     :param name: Name of the user
     :param colour_hex: Colour to set
     """
-    # Query our range from Sheets
-    sheet_response = sheets.values().get(spreadsheetId=google_sheet_id, range=google_sheet_range).execute()
-    sheet_values = sheet_response.get('values', [])
-
-    # Make sure we got something
-    if not sheet_values:
-        print(GOOGLE_PREFIX + 'No data found')
-        return
-
-    # Try find the target name within the range
     column_start = 0
     column_end = 0
     row_start = 0
     row_end = 0
-    for y, row in enumerate(sheet_values):
-        for x, value in enumerate(row):
-            if value and value in name:
-                column_start = x
-                column_end = x + 1
-                row_start = y
-                row_end = y + 1
-                break
+
+    # Iterate over each range and find a cell that corresponds to name
+    found = False
+    for range in google_sheet_ranges.split():
+        # Query our range from Sheets
+        sheet_response = sheets.values().get(spreadsheetId=google_sheet_id, range=range).execute()
+        sheet_values = sheet_response.get('values', [])
+
+        # Make sure we got something
+        if not sheet_values:
+            print(GOOGLE_PREFIX + 'No data found')
+            return
+
+        # Get the x and y origin offset for this range
+        x_offset, y_offset = parse_a1_coords(range.split(':')[0])
+
+        # Try find the target name within the range
+        for y, row in enumerate(sheet_values):
+            for x, value in enumerate(row):
+                if value and value in name:
+                    column_start = x_offset + x
+                    column_end = x_offset + x + 1
+                    row_start = y_offset + y
+                    row_end = y_offset + y + 1
+                    found = True
+                    break
+
+        # Stop iterating ranges if we found what we're looking for
+        if found:
+            break
 
     # Make sure we got a value
-    if column_end == 0 or row_end == 0:
-        print(GOOGLE_PREFIX + 'Unable to find \'{}\' in range {}'.format(name, google_sheet_range))
+    if not found or column_end == 0 or row_end == 0:
+        print(GOOGLE_PREFIX + 'Unable to find \'{}\' in ranges {}'.format(name, google_sheet_ranges))
         return
 
     # Convert the hex string to RGB values
