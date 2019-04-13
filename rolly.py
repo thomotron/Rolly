@@ -182,7 +182,7 @@ def sheet_update_user(name, colour_hex):
         # Try find the target name within the range
         for y, row in enumerate(sheet_values):
             for x, value in enumerate(row):
-                if value and value in name:
+                if value and value.lower() in name.lower():
                     column_start = x_offset + x
                     column_end = x_offset + x + 1
                     row_start = y_offset + y
@@ -287,6 +287,41 @@ async def on_raw_reaction_add(event):
             return
         finally:
             sheet_update_user(user.display_name, reaction_colours[emoji])
+
+@rolly_discord.event
+async def on_raw_reaction_remove(event):
+    # Grab the channel and message that was reacted on
+    channel = rolly_discord.get_channel(event.channel_id)
+    message = await channel.fetch_message(event.message_id)
+
+    # Check if it was on a message we sent
+    if str(message.author.id) == discord_id:
+        # Grab the user that reacted and the emoji
+        user = channel.guild.get_member(event.user_id)
+        emoji = event.emoji.name
+
+        # Ignore reacts that we make
+        if str(user.id) == discord_id:
+            return
+
+        # Search through the other reacts
+        global reaction_colours
+        for reaction in message.reactions:
+            # Skip the removed emoji and emojis we can't process
+            if reaction.emoji == emoji or reaction.emoji not in reaction_colours.keys():
+                continue
+
+            # Iterate over each user that has reacted
+            for react_user in await reaction.users().flatten():
+                if react_user.id == user.id:
+                    # Use this emoji instead
+                    print(DISCORD_PREFIX + '{} removed their \'{}\' react, but they still have a \'{}\' react. Changing their cell to {}'.format(user.display_name, emoji, reaction.emoji, reaction_colours[reaction.emoji]))
+                    sheet_update_user(user.display_name, reaction_colours[reaction.emoji])
+                    return
+
+        # Didn't find an alternate emoji to use, clear their cell
+        print(DISCORD_PREFIX + '{} removed their \'{}\' react, changing their cell to {}'.format(user.display_name, emoji, 'ffffff'))
+        sheet_update_user(user.display_name, 'ffffff')
 
 ##### Start the Discord bot ############################################################################################
 
