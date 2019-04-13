@@ -25,7 +25,7 @@ if not config.sections():
           'client_secret = \n' +
           'redirect_url = \n' +
           'sheet_id = \n' +
-          'sheet_range = \n'
+          'sheet_ranges = \n'
           '\n' +
           '[Discord]\n' +
           'client_id = \n' +
@@ -51,8 +51,8 @@ if 'redirect_url' not in config['Google']:
 if 'sheet_id' not in config['Google']:
     print('Failed to read config: \'sheet_id\' missing from section \'Google\'')
     exit(1)
-if 'sheet_range' not in config['Google']:
-    print('Failed to read config: \'sheet_range\' missing from section \'Google\'')
+if 'sheet_ranges' not in config['Google']:
+    print('Failed to read config: \'sheet_ranges\' missing from section \'Google\'')
     exit(1)
 
 if 'Discord' not in config:
@@ -78,7 +78,7 @@ google_id = config['Google']['client_id']
 google_secret = config['Google']['client_secret']
 google_redirect = config['Google']['redirect_url']
 google_sheet_id = config['Google']['sheet_id']
-google_sheet_range = config['Google']['sheet_range']
+google_sheet_range = config['Google']['sheet_ranges']
 
 discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
