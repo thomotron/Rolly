@@ -143,10 +143,10 @@ def parse_a1_coords(a1):
     match = re.match(r"(?:\w+!)?(([A-Z]+)([0-9]+))", a1, re.I)
     if match:
         items = match.groups()
-        if items.count == 3:
+        if len(items) == 3:
             # return items[2:3]
             colNameToNum = lambda cn: sum([((ord(cn[-1 - pos]) - 64) * 26 ** pos) for pos in range(len(cn))])
-            return colNameToNum(items[2]), int(items[3]) - 1
+            return colNameToNum(items[1]) - 1, int(items[2]) - 1
         else:
             raise ValueError('Got more parts than expected.')
     else:
