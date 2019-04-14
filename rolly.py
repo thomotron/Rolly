@@ -260,6 +260,26 @@ async def on_message(message):
         else:
             await setup(message.channel)
 
+    elif args[0] == 'setsheet':
+        # Make sure we've been given an ID
+        if len(args) < 2:
+            await message.channel.send('I need a sheet ID to do that.\nYou can get it from the URL e.g. `https://docs.google.com/spreadsheets/d/<sheet id>/`')
+        else:
+            # Update and write config to file
+            config['Google']['sheet_id'] = args[1]
+            with open(config_path, 'w') as file:
+                config.write(file)
+
+    elif args[0] == 'setranges':
+        # Make sure we've been given a range
+        if len(args) < 2:
+            await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.')
+        else:
+            # Update and write config to file
+            config['Google']['sheet_ranges'] = ' '.join(args[1:])
+            with open(config_path, 'w') as file:
+                config.write(file)
+
     # Delete the command
     await message.delete()
 
