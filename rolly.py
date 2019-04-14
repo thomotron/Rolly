@@ -259,7 +259,7 @@ async def on_message(message):
         return
 
     # Split the command into arguments
-    args = message.content.split()[1:]
+    args = message.content.strip().split()[1:]
 
     # Return a message if no args are provided
     if not args:
@@ -295,6 +295,8 @@ async def on_message(message):
                 google_sheet_ranges = ' '.join(args[1:])
                 with open(config_path, 'w') as file:
                     config.write(file)
+
+        # TODO: Add better range modification commands (i.e. ranges, addranges, removeranges)
 
     # Delete the command
     await message.delete()
