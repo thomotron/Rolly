@@ -279,6 +279,8 @@ async def on_message(message):
             else:
                 # Update and write config to file
                 config['Google']['sheet_id'] = args[1]
+                global google_sheet_id
+                google_sheet_id = args[1]
                 with open(config_path, 'w') as file:
                     config.write(file)
 
@@ -289,6 +291,8 @@ async def on_message(message):
             else:
                 # Update and write config to file
                 config['Google']['sheet_ranges'] = ' '.join(args[1:])
+                global google_sheet_ranges
+                google_sheet_ranges = ' '.join(args[1:])
                 with open(config_path, 'w') as file:
                     config.write(file)
 
