@@ -112,11 +112,13 @@ sheets = sheets_service.spreadsheets()
 
 ##### Define some functions ############################################################################################
 
-async def setup(channel):
+async def setup(channel, message_content = ''):
     """
     Creates a roll call message in the given channel
+    :param channel: Channel to send a message to
+    :param message_content: Optional message content
     """
-    message = await channel.send('Roll call!')
+    message = await channel.send(message_content if message_content else 'Roll call!')
     await message.add_reaction('✅')
     await message.add_reaction('❔')
     await message.add_reaction('❌')
@@ -253,7 +255,10 @@ async def on_message(message):
 
     # Filter what command came through
     if args[0] == 'create':
-        await setup(message.channel)
+        if len(args) > 1:
+            await setup(message.channel, ' '.join(args))
+        else:
+            await setup(message.channel)
 
     # Delete the command
     await message.delete()
