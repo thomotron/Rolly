@@ -78,7 +78,7 @@ google_id = config['Google']['client_id']
 google_secret = config['Google']['client_secret']
 google_redirect = config['Google']['redirect_url']
 google_sheet_id = config['Google']['sheet_id']
-google_sheet_range = config['Google']['sheet_ranges']
+google_sheet_ranges = config['Google']['sheet_ranges']
 
 discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
@@ -145,10 +145,10 @@ def parse_a1_coords(a1):
     match = re.match(r"(?:\w+!)?(([A-Z]+)([0-9]+))", a1, re.I)
     if match:
         items = match.groups()
-        if items.count == 3:
+        if len(items) == 3:
             # return items[2:3]
             colNameToNum = lambda cn: sum([((ord(cn[-1 - pos]) - 64) * 26 ** pos) for pos in range(len(cn))])
-            return colNameToNum(items[2]), int(items[3]) - 1
+            return colNameToNum(items[1]) - 1, int(items[2]) - 1
         else:
             raise ValueError('Got more parts than expected.')
     else:
@@ -161,32 +161,44 @@ def sheet_update_user(name, colour_hex):
     :param name: Name of the user
     :param colour_hex: Colour to set
     """
-    # Query our range from Sheets
-    sheet_response = sheets.values().get(spreadsheetId=google_sheet_id, range=google_sheet_range).execute()
-    sheet_values = sheet_response.get('values', [])
-
-    # Make sure we got something
-    if not sheet_values:
-        print(GOOGLE_PREFIX + 'No data found')
-        return
-
-    # Try find the target name within the range
     column_start = 0
     column_end = 0
     row_start = 0
     row_end = 0
-    for y, row in enumerate(sheet_values):
-        for x, value in enumerate(row):
-            if value and value in name:
-                column_start = x
-                column_end = x + 1
-                row_start = y
-                row_end = y + 1
-                break
+
+    # Iterate over each range and find a cell that corresponds to name
+    found = False
+    for range in google_sheet_ranges.split():
+        # Query our range from Sheets
+        sheet_response = sheets.values().get(spreadsheetId=google_sheet_id, range=range).execute()
+        sheet_values = sheet_response.get('values', [])
+
+        # Make sure we got something
+        if not sheet_values:
+            print(GOOGLE_PREFIX + 'No data found')
+            return
+
+        # Get the x and y origin offset for this range
+        x_offset, y_offset = parse_a1_coords(range.split(':')[0])
+
+        # Try find the target name within the range
+        for y, row in enumerate(sheet_values):
+            for x, value in enumerate(row):
+                if value and value.lower() in name.lower():
+                    column_start = x_offset + x
+                    column_end = x_offset + x + 1
+                    row_start = y_offset + y
+                    row_end = y_offset + y + 1
+                    found = True
+                    break
+
+        # Stop iterating ranges if we found what we're looking for
+        if found:
+            break
 
     # Make sure we got a value
-    if column_end == 0 or row_end == 0:
-        print(GOOGLE_PREFIX + 'Unable to find \'{}\' in range {}'.format(name, google_sheet_range))
+    if not found or column_end == 0 or row_end == 0:
+        print(GOOGLE_PREFIX + 'Unable to find \'{}\' in ranges {}'.format(name, google_sheet_ranges))
         return
 
     # Convert the hex string to RGB values
@@ -309,18 +321,40 @@ async def on_raw_reaction_add(event):
         finally:
             sheet_update_user(user.display_name, reaction_colours[emoji])
 
-
 @rolly_discord.event
-async def on_reaction_add(reaction, user):
-    if reaction.message.author.id != discord_id:
-        # print(DISCORD_PREFIX + 'Got react for someone else\'s message')
-        return
+async def on_raw_reaction_remove(event):
+    # Grab the channel and message that was reacted on
+    channel = rolly_discord.get_channel(event.channel_id)
+    message = await channel.fetch_message(event.message_id)
 
-    global reaction_colours
-    if reaction_colours[reaction.emoji]:
-        print(DISCORD_PREFIX + '{} reacted with {}, changing their cell to {}'.format(user.name, reaction.emoji, reaction_colours[reaction.emoji]))
-    else:
-        print(DISCORD_PREFIX + '{} reacted with unsupported emoji {}'.format(reaction.user.name, reaction.emoji))
+    # Check if it was on a message we sent
+    if str(message.author.id) == discord_id:
+        # Grab the user that reacted and the emoji
+        user = channel.guild.get_member(event.user_id)
+        emoji = event.emoji.name
+
+        # Ignore reacts that we make
+        if str(user.id) == discord_id:
+            return
+
+        # Search through the other reacts
+        global reaction_colours
+        for reaction in message.reactions:
+            # Skip the removed emoji and emojis we can't process
+            if reaction.emoji == emoji or reaction.emoji not in reaction_colours.keys():
+                continue
+
+            # Iterate over each user that has reacted
+            for react_user in await reaction.users().flatten():
+                if react_user.id == user.id:
+                    # Use this emoji instead
+                    print(DISCORD_PREFIX + '{} removed their \'{}\' react, but they still have a \'{}\' react. Changing their cell to {}'.format(user.display_name, emoji, reaction.emoji, reaction_colours[reaction.emoji]))
+                    sheet_update_user(user.display_name, reaction_colours[reaction.emoji])
+                    return
+
+        # Didn't find an alternate emoji to use, clear their cell
+        print(DISCORD_PREFIX + '{} removed their \'{}\' react, changing their cell to {}'.format(user.display_name, emoji, 'ffffff'))
+        sheet_update_user(user.display_name, 'ffffff')
 
 ##### Start the Discord bot ############################################################################################
 
