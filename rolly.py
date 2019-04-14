@@ -244,11 +244,19 @@ async def on_message(message):
     if not message.content.startswith('#rolly'):
         return
 
+    # Split the command into arguments
+    args = message.content.split()[1:]
+
+    # Return a message if no args are provided
+    if not args:
+        await message.channel.send('Yo, I\'m Rolly. Try `#rolly create` to start a roll call.')
+
     # Filter what command came through
-    if message.content.startswith('#rolly'):
+    if args[0] == 'create':
         await setup(message.channel)
-    else:
-        return
+
+    # Delete the command
+    await message.delete()
 
 @rolly_discord.event
 async def on_raw_reaction_add(event):
