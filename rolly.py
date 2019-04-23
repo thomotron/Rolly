@@ -1,8 +1,11 @@
 #!/bin/python3
+import datetime
 import re
 import discord
+import httplib2
 from argparse import ArgumentParser
 from configparser import ConfigParser
+from threading import Thread, Event
 from googleapiclient.discovery import build
 from oauth2client.client import OAuth2WebServerFlow
 
@@ -96,7 +99,8 @@ args = parser.parse_args()
 flow = OAuth2WebServerFlow(client_id=google_id,
                            client_secret=google_secret,
                            scope='https://www.googleapis.com/auth/spreadsheets',
-                           redirect_uri=google_redirect)
+                           redirect_uri=google_redirect,
+                           prompt='consent')
 
 google_auth_uri = flow.step1_get_authorize_url()
 
@@ -109,6 +113,22 @@ google_credentials = flow.step2_exchange(google_auth_code)
 
 sheets_service = build('sheets', 'v4', credentials=google_credentials)
 sheets = sheets_service.spreadsheets()
+
+##### Define some classes ##############################################################################################
+
+class RepeatingTimer(Thread):
+    def __init__(self, interval_seconds, callback):
+        super().__init__()
+        self.stop_event = Event()
+        self.interval_seconds = interval_seconds
+        self.callback = callback
+
+    def run(self):
+        while not self.stop_event.wait(self.interval_seconds):
+            self.callback()
+
+    def stop(self):
+        self.stop_event.set()
 
 ##### Define some functions ############################################################################################
 
@@ -231,6 +251,24 @@ def sheet_update_user(name, colour_hex):
         ]
     }).execute()
 
+
+def google_refresh_tokens():
+    if not google_credentials.invalid:
+        # request = google.auth.transport.requests.Request()
+        request = httplib2.Http()
+        google_credentials.refresh(request)
+        print(GOOGLE_PREFIX + 'Refreshed tokens')
+        print(GOOGLE_PREFIX + 'New token expires in ' + str(datetime.datetime.now() - google_credentials.token_expiry))
+    else:
+        print(GOOGLE_PREFIX + 'Failed to refresh tokens, credentials are invalid now')
+        print(GOOGLE_PREFIX + 'Stopping token timer since we cannot refresh anymore...')
+        google_token_timer.stop()
+
+
+##### Start a timer to keep our Google tokens refreshed ################################################################
+
+google_token_timer = RepeatingTimer(600, google_refresh_tokens)
+google_token_timer.start()
 
 ##### Set up the Discord bot ###########################################################################################
 
@@ -365,3 +403,7 @@ async def on_raw_reaction_remove(event):
 ##### Start the Discord bot ############################################################################################
 
 rolly_discord.run(discord_bot_token)
+
+##### Stop the token refresh timer #####################################################################################
+
+google_token_timer.stop()

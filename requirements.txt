@@ -1,3 +1,4 @@
+httplib2
 google-api-python-client
 oauth2client
 discord.py>=1.0.0
