@@ -285,6 +285,9 @@ async def on_ready():
 
 @rolly_discord.event
 async def on_message(message):
+    # Declare this globally here, since we use it early on, /and/ in a command
+    global discord_bot_channel
+
     # Make sure this is from the desired server and channel
     if str(message.guild.id) != discord_bot_server or str(message.channel.id) != discord_bot_channel:
         # print(DISCORD_PREFIX + 'Got a message from server {} channel {}, expected server {} channel {}'.format(message.guild.id, message.channel.id, discord_bot_server, discord_bot_channel))
@@ -336,6 +339,21 @@ async def on_message(message):
                 google_sheet_ranges = ' '.join(args[1:])
                 with open(config_path, 'w') as file:
                     config.write(file)
+
+        elif args[0] == 'setchannel':
+            # Make sure we're given an ID
+            if not message.channel_mentions:
+                await message.channel.send('I need a channel ID to do that.\nMention a channel by typing `#channel_name` (e.g. `#roll-call`).', delete_after=30)
+            else:
+                # Update and write config to file
+                channel_id = str(message.channel_mentions[0].id)
+                config['Discord']['bot_channel'] = channel_id
+                discord_bot_channel = channel_id
+                with open(config_path, 'w') as file:
+                    config.write(file)
+
+                # Send a message confirming the channel change
+                await message.channel.send('Ok, I\'ll be working in <#' + str(discord_bot_channel) + '> from now on', delete_after=30)
 
         # TODO: Add better range modification commands (i.e. ranges, addranges, removeranges)
 
