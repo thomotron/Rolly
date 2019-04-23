@@ -127,3 +127,6 @@ dmypy.json
 
 # Rolly config
 /rolly.conf
+
+# Rolly credentials
+credentials.pkl
