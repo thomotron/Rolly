@@ -1,8 +1,10 @@
 #!/bin/python3
 import datetime
+import os
 import re
 import discord
 import httplib2
+import pickle
 from argparse import ArgumentParser
 from configparser import ConfigParser
 from threading import Thread, Event
@@ -13,6 +15,7 @@ from oauth2client.client import OAuth2WebServerFlow
 
 DISCORD_PREFIX = '[Discord] '
 GOOGLE_PREFIX = '[Google] '
+CREDENTIALS_FILE = 'credentials.pkl'
 
 ##### Read in our ID and secret from config ############################################################################
 
@@ -99,18 +102,44 @@ args = parser.parse_args()
 
 ##### Authorise with Google ############################################################################################
 
-flow = OAuth2WebServerFlow(client_id=google_id,
-                           client_secret=google_secret,
-                           scope='https://www.googleapis.com/auth/spreadsheets',
-                           redirect_uri=google_redirect,
-                           prompt='consent')
+google_credentials = None
+def google_refresh_tokens():
+    if google_credentials and not google_credentials.invalid:
+        google_credentials.refresh(httplib2.Http())
+        print(GOOGLE_PREFIX + 'Refreshed tokens')
+        print(GOOGLE_PREFIX + 'New token expires in ' + str(datetime.datetime.now() - google_credentials.token_expiry))
 
-google_auth_uri = flow.step1_get_authorize_url()
+        # Pickle the credentials object
+        with open(CREDENTIALS_FILE, 'wb') as file:
+            pickle.dump(google_credentials, file)
 
-print("Please authorise yourself at the below URL and paste the code here")
-print(google_auth_uri)
-google_auth_code = input('Code: ')
-google_credentials = flow.step2_exchange(google_auth_code)
+        return True
+    else:
+        print(GOOGLE_PREFIX + 'Failed to refresh tokens, credentials are invalid now')
+        return False
+
+
+if os.path.exists(CREDENTIALS_FILE):
+    with open(CREDENTIALS_FILE, 'rb') as file:
+        google_credentials = pickle.load(file)
+
+if not google_refresh_tokens():
+    flow = OAuth2WebServerFlow(client_id=google_id,
+                               client_secret=google_secret,
+                               scope='https://www.googleapis.com/auth/spreadsheets',
+                               redirect_uri=google_redirect,
+                               prompt='consent')
+
+    google_auth_uri = flow.step1_get_authorize_url()
+
+    print("Please authorise yourself at the below URL and paste the code here")
+    print(google_auth_uri)
+    google_auth_code = input('Code: ')
+    google_credentials = flow.step2_exchange(google_auth_code)
+
+    # Pickle the credentials object
+    with open(CREDENTIALS_FILE, 'wb') as file:
+        pickle.dump(google_credentials, file)
 
 ##### Set up the Google Sheets service #################################################################################
 
@@ -255,22 +284,15 @@ def sheet_update_user(name, colour_hex):
     }).execute()
 
 
-def google_refresh_tokens():
-    if not google_credentials.invalid:
-        # request = google.auth.transport.requests.Request()
-        request = httplib2.Http()
-        google_credentials.refresh(request)
-        print(GOOGLE_PREFIX + 'Refreshed tokens')
-        print(GOOGLE_PREFIX + 'New token expires in ' + str(datetime.datetime.now() - google_credentials.token_expiry))
-    else:
-        print(GOOGLE_PREFIX + 'Failed to refresh tokens, credentials are invalid now')
+def google_token_timer_refresh():
+    if not google_refresh_tokens():
         print(GOOGLE_PREFIX + 'Stopping token timer since we cannot refresh anymore...')
         google_token_timer.stop()
 
 
 ##### Start a timer to keep our Google tokens refreshed ################################################################
 
-google_token_timer = RepeatingTimer(600, google_refresh_tokens)
+google_token_timer = RepeatingTimer(600, google_token_timer_refresh)
 google_token_timer.start()
 
 ##### Set up the Discord bot ###########################################################################################
