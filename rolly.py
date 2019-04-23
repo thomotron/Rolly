@@ -85,9 +85,12 @@ google_sheet_ranges = config['Google']['sheet_ranges']
 
 discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
-discord_bot_owner = config['Discord']['bot_owner']
 discord_bot_server = config['Discord']['bot_server']
 discord_bot_channel = config['Discord']['bot_channel']
+try:
+    discord_bot_owner = config['Discord']['bot_owner']
+except KeyError:
+    discord_bot_owner = ''
 
 ##### Parse arguments ##################################################################################################
 
