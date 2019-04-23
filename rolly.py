@@ -358,7 +358,7 @@ async def on_message(message):
         elif args[0] == 'setchannel':
             # Make sure we're given an ID
             if not message.channel_mentions:
-                await message.channel.send('I need a channel ID to do that.\nMention a channel by typing `#channel_name` (e.g. `#roll-call`).', delete_after=30)
+                await message.channel.send('I need a channel mention to do that.\nMention a channel by typing `#channel_name` (e.g. `#roll-call`).', delete_after=30)
             else:
                 # Update and write config to file
                 channel_id = str(message.channel_mentions[0].id)
