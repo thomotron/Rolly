@@ -316,7 +316,16 @@ async def on_message(message):
         await message.channel.send('Yo, I\'m Rolly. Try `{} create` to start a roll call.'.format(prefix), delete_after=30)
     else:
         # Filter what command came through
-        if args[0] == 'create':
+        if args[0] == 'help':
+            await message.channel.send('Here\'s a list of commands you can give me:\n' +
+                                       '\n' +
+                                       '`help` - Shows this help text\n' +
+                                       '`create` - Creates a new roll call message\n' +
+                                       '`setsheet` - Sets the Google Sheet ID to update\n' +
+                                       '`setranges` - Sets the ranges to update in the spreadsheet\n' +
+                                       '`setchannel` - Sets the channel I\'ll be available in')
+
+        elif args[0] == 'create':
             if len(args) > 1:
                 await setup(message.channel, ' '.join(args[1:]))
             else:
