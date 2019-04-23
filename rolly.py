@@ -298,8 +298,14 @@ async def on_message(message):
         # print(DISCORD_PREFIX + 'Got a message from user {}, expected user {}'.format(message.author.id, discord_bot_owner))
         return
 
-    # Ignore messages not intended for us
-    if not message.content.startswith('#rolly'):
+    # Determine what prefix was used to address us, if any
+    prefix = ''
+    if message.content.startswith('#rolly'):
+        prefix = '#rolly'
+    elif message.content.startswith('<@' + str(discord_id) + '>'):
+        prefix = '@{}#{}'.format(rolly_discord.user.name, rolly_discord.user.discriminator)
+    else:
+        # We weren't addressed, we can stop here
         return
 
     # Split the command into arguments
@@ -307,7 +313,7 @@ async def on_message(message):
 
     # Return a message if no args are provided
     if not args:
-        await message.channel.send('Yo, I\'m Rolly. Try `#rolly create` to start a roll call.', delete_after=30)
+        await message.channel.send('Yo, I\'m Rolly. Try `{} create` to start a roll call.'.format(prefix), delete_after=30)
     else:
         # Filter what command came through
         if args[0] == 'create':
