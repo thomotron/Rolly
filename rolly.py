@@ -38,8 +38,7 @@ if not config.sections():
           'client_secret = \n' +
           'bot_token = \n' +
           'bot_owner = \n' +
-          'bot_server = \n' +
-          'bot_channel = \n')
+          'bot_server = \n')
     exit(1)
 
 if 'Google' not in config:
@@ -76,9 +75,6 @@ if 'bot_token' not in config['Discord']:
 if 'bot_server' not in config['Discord']:
     print('Failed to read config: \'bot_server\' missing from section \'Discord\'')
     exit(1)
-if 'bot_channel' not in config['Discord']:
-    print('Failed to read config: \'bot_channel\' missing from section \'Discord\'')
-    exit(1)
 
 google_id = config['Google']['client_id']
 google_secret = config['Google']['client_secret']
@@ -89,7 +85,6 @@ google_sheet_ranges = config['Google']['sheet_ranges']
 discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
 discord_bot_server = config['Discord']['bot_server']
-discord_bot_channel = config['Discord']['bot_channel']
 try:
     discord_bot_owner = config['Discord']['bot_owner']
 except KeyError:
@@ -310,9 +305,9 @@ async def on_message(message):
     # Declare this globally here, since we use it early on, /and/ in a command
     global discord_bot_channel
 
-    # Make sure this is from the desired server and channel
-    if str(message.guild.id) != discord_bot_server or str(message.channel.id) != discord_bot_channel:
-        # print(DISCORD_PREFIX + 'Got a message from server {} channel {}, expected server {} channel {}'.format(message.guild.id, message.channel.id, discord_bot_server, discord_bot_channel))
+    # Make sure this is from the desired server
+    if str(message.guild.id) != discord_bot_server:
+        # print(DISCORD_PREFIX + 'Got a message from server {} channel {}, expected server {}'.format(message.guild.id, message.channel.id, discord_bot_server))
         return
 
     # If the bot owner is set, make sure this is from them
@@ -344,8 +339,7 @@ async def on_message(message):
                                        '`help` - Shows this help text\n' +
                                        '`create` - Creates a new roll call message\n' +
                                        '`setsheet` - Sets the Google Sheet ID to update\n' +
-                                       '`setranges` - Sets the ranges to update in the spreadsheet\n' +
-                                       '`setchannel` - Sets the channel I\'ll be available in')
+                                       '`setranges` - Sets the ranges to update in the spreadsheet')
 
         elif args[0] == 'create':
             if len(args) > 1:
@@ -376,21 +370,6 @@ async def on_message(message):
                 google_sheet_ranges = ' '.join(args[1:])
                 with open(config_path, 'w') as file:
                     config.write(file)
-
-        elif args[0] == 'setchannel':
-            # Make sure we're given an ID
-            if not message.channel_mentions:
-                await message.channel.send('I need a channel mention to do that.\nMention a channel by typing `#channel_name` (e.g. `#roll-call`).', delete_after=30)
-            else:
-                # Update and write config to file
-                channel_id = str(message.channel_mentions[0].id)
-                config['Discord']['bot_channel'] = channel_id
-                discord_bot_channel = channel_id
-                with open(config_path, 'w') as file:
-                    config.write(file)
-
-                # Send a message confirming the channel change
-                await message.channel.send('Ok, I\'ll be working in <#' + str(discord_bot_channel) + '> from now on', delete_after=30)
 
         # TODO: Add better range modification commands (i.e. ranges, addranges, removeranges)
 
