@@ -394,13 +394,13 @@ async def on_raw_reaction_add(event):
 
         # Report what's happened
         global reaction_colours
-        try:
+        if emoji in reaction_colours:
             print(DISCORD_PREFIX + '{} reacted with \'{}\', changing their cell to {}'.format(user.display_name, emoji, reaction_colours[emoji]))
-        except KeyError:
+        else:
             print(DISCORD_PREFIX + '{} reacted with unsupported emoji \'{}\''.format(user.display_name, emoji))
             return
-        finally:
-            sheet_update_user(user.display_name, reaction_colours[emoji])
+
+        sheet_update_user(user.display_name, reaction_colours[emoji])
 
 @rolly_discord.event
 async def on_raw_reaction_remove(event):
