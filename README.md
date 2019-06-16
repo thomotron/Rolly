@@ -1,5 +1,5 @@
 # Rolly
-A simple Discord roll call bot for our Arma 3 unit
+A simple Discord roll call bot for our Arma 3 unit.
 
 Rolly takes in reacts from members and colours their cells in a Google Sheets spreadsheet green, yellow, or red to represent attendance.
 
