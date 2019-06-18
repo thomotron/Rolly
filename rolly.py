@@ -343,6 +343,8 @@ async def on_message(message):
                                        '`help` - Shows this help text\n' +
                                        '`create` - Creates a new roll call message\n' +
                                        '`setsheet` - Sets the Google Sheet ID to update\n' +
+                                       '`ranges` - Shows the current allowed ranges in the spreadsheet\n' +
+                                       '`addranges` - Add one or more allowed ranges for the spreadsheet\n' +
                                        '`setranges` - Sets the ranges to update in the spreadsheet')
 
         elif args[0] == 'create':
