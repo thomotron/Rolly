@@ -332,6 +332,10 @@ async def on_message(message):
     if not args:
         await message.channel.send('Yo, I\'m Rolly. Try `{} create` to start a roll call.'.format(prefix), delete_after=30)
     else:
+        # Declare some globals
+        global google_sheet_ranges
+        global google_sheet_id
+
         # Filter what command came through
         if args[0] == 'help':
             await message.channel.send('Here\'s a list of commands you can give me:\n' +
@@ -354,8 +358,31 @@ async def on_message(message):
             else:
                 # Update and write config to file
                 config['Google']['sheet_id'] = args[1]
-                global google_sheet_id
                 google_sheet_id = args[1]
+                with open(config_path, 'w') as file:
+                    config.write(file)
+
+        elif args[0] == 'ranges':
+            # List off the current ranges
+            # message_str = 'Current allowed ranges are: `'
+            # if len(config['Google']['sheet_ranges']) < 3:
+            #     message_str = message_str + '`, and `'.join(config['Google']['sheet_ranges'])
+            # else:
+            #     message_str = message_str + '`, `'.join(config['Google']['sheet_ranges'][:-1]) + '`, and `' + config['Google']['sheet_ranges'][-1]
+            # message_str = message_str + '`'
+            message_str = 'Current allowed ranges are: `' + config['Google']['sheet_ranges'] + '`'
+
+            await message.channel.send(message_str)
+
+        elif args[0] == 'addranges':
+            # Make sure we've been given a range
+            if len(args) < 2:
+                await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.', delete_after=30)
+            else:
+                # Update and write config to file
+                new_ranges = config['Google']['sheet_ranges'] + ' ' + ' '.join(args[1:])
+                config['Google']['sheet_ranges'] = new_ranges
+                google_sheet_ranges = new_ranges
                 with open(config_path, 'w') as file:
                     config.write(file)
 
@@ -366,7 +393,6 @@ async def on_message(message):
             else:
                 # Update and write config to file
                 config['Google']['sheet_ranges'] = ' '.join(args[1:])
-                global google_sheet_ranges
                 google_sheet_ranges = ' '.join(args[1:])
                 with open(config_path, 'w') as file:
                     config.write(file)
