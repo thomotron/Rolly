@@ -303,7 +303,7 @@ async def on_ready():
 @rolly_discord.event
 async def on_message(message):
     # Declare this globally here, since we use it early on, /and/ in a command
-    global discord_bot_channel
+    #global discord_bot_channel
 
     # Make sure this is from the desired server
     if str(message.guild.id) != discord_bot_server:
