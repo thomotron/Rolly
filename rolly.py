@@ -388,6 +388,18 @@ async def on_message(message):
                 with open(config_path, 'w') as file:
                     config.write(file)
 
+        elif args[0] == 'addranges':
+            # Make sure we've been given a range
+            if len(args) < 2:
+                await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.', delete_after=30)
+            else:
+                # Update and write config to file
+                new_ranges = config['Google']['sheet_ranges'] + ' ' + ' '.join(args[1:])
+                config['Google']['sheet_ranges'] = new_ranges
+                google_sheet_ranges = new_ranges
+                with open(config_path, 'w') as file:
+                    config.write(file)
+
         elif args[0] == 'setranges':
             # Make sure we've been given a range
             if len(args) < 2:
