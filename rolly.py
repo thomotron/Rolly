@@ -436,6 +436,29 @@ async def on_raw_reaction_add(event):
         if str(user.id) == discord_id:
             return
 
+        # Parse their username against the unit's name policy
+        # e.g.:
+        # [Some Other Unit] LCpl T. Wade (haha yeet)
+        # \---------------/ \--/ \/ \--/ \---------/
+        #     Unit tag         Initial   Other crap
+        #                   Rank    Name
+        username = ''
+        matches = re.match(r'(?:^(?:(\[[\w\ ]+\])\ )?([\S]+)\ ([\S]+)\ ([\S]+)(\ .*)?$)|(^[\w]+$)', user.display_name, re.IGNORECASE)
+        if matches and matches.groups():
+            groups = matches.groups()
+
+            # Check if this is an ONI agent (single word name)
+            if groups[5]:
+                username = groups[5]
+            # Check for foreign unit members
+            elif groups[0]:
+                username = ''  # Don't set their username, we don't have foreign unit members on the roster
+            # Check for a standard element member
+            elif groups[1] and groups[2] and groups[3]:
+                username = ' '.join(groups[2:3])  # Join their initial and name by a space
+            else:
+                username = ''  # Don't set a username, this user cannot be on the roster as per the naming rules
+
         # Report what's happened
         global reaction_colours
         if emoji in reaction_colours:
@@ -444,7 +467,7 @@ async def on_raw_reaction_add(event):
             print(DISCORD_PREFIX + '{} reacted with unsupported emoji \'{}\''.format(user.display_name, emoji))
             return
 
-        sheet_update_user(user.display_name, reaction_colours[emoji])
+        sheet_update_user(username, reaction_colours[emoji])
 
 @rolly_discord.event
 async def on_raw_reaction_remove(event):
