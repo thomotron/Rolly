@@ -37,7 +37,7 @@ if not config.sections():
           'client_id = \n' +
           'client_secret = \n' +
           'bot_token = \n' +
-          'bot_owner = \n' +
+          'bot_owners = []\n' +
           'bot_server = \n')
     exit(1)
 
@@ -86,9 +86,9 @@ discord_id = config['Discord']['client_id']
 discord_bot_token = config['Discord']['bot_token']
 discord_bot_server = config['Discord']['bot_server']
 try:
-    discord_bot_owner = config['Discord']['bot_owner']
+    discord_bot_owners = config['Discord']['bot_owners'].split()
 except KeyError:
-    discord_bot_owner = ''
+    discord_bot_owners = []
 
 ##### Parse arguments ##################################################################################################
 
@@ -311,8 +311,8 @@ async def on_message(message):
         return
 
     # If the bot owner is set, make sure this is from them
-    if discord_bot_owner and str(message.author.id) not in discord_bot_owner:
-        # print(DISCORD_PREFIX + 'Got a message from user {}, expected user {}'.format(message.author.id, discord_bot_owner))
+    if discord_bot_owners and str(message.author.id) not in discord_bot_owners:
+        # print(DISCORD_PREFIX + 'Got a message from user {}, expected one of {}'.format(message.author.id, discord_bot_owners))
         return
 
     # Determine what prefix was used to address us, if any
