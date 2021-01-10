@@ -7,7 +7,7 @@ import httplib2
 import pickle
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from threading import Thread, Event
+from threading import Thread, Event, RLock
 from googleapiclient.discovery import build
 from oauth2client.client import OAuth2WebServerFlow
 
@@ -201,6 +201,8 @@ def parse_a1_coords(a1):
     else:
         raise ValueError('Unable to process A1 string properly, are you sure it is valid?')
 
+
+sheets_queue_lock = RLock()
 sheets_queued_changes = []
 def sheet_update_user(name, colour_hex):
     """
@@ -208,90 +210,106 @@ def sheet_update_user(name, colour_hex):
     :param name: Name of the user
     :param colour_hex: Colour to set
     """
-    column_start = 0
-    column_end = 0
-    row_start = 0
-    row_end = 0
+    locked = False
+    try:
+        # Gain exclusive access to the Sheets queue
+        if sheets_queue_lock.acquire(blocking=True):
+            locked = True
+        else:
+            raise Exception('Unable to acquire lock on Sheets queue')
 
-    # Iterate over each range and find a cell that corresponds to name
-    found = False
-    for range in google_sheet_ranges.split():
-        # Query our range from Sheets
-        sheet_response = sheets.values().get(spreadsheetId=google_sheet_id, range=range).execute()
-        sheet_values = sheet_response.get('values', [])
-
-        # Make sure we got something
-        if not sheet_values:
-            print(GOOGLE_PREFIX + 'No data found')
-            return
-
-        # Get the x and y origin offset for this range
-        x_offset, y_offset = parse_a1_coords(range.split(':')[0])
-
-        # Try find the target name within the range
-        for y, row in enumerate(sheet_values):
-            for x, value in enumerate(row):
-                if value and value.lower() in name.lower():
-                    column_start = x_offset + x
-                    column_end = x_offset + x + 1
-                    row_start = y_offset + y
-                    row_end = y_offset + y + 1
-                    found = True
-                    break
-
-        # Stop iterating ranges if we found what we're looking for
-        if found:
-            break
-
-    # Make sure we got a value
-    if not found or column_end == 0 or row_end == 0:
-        print(GOOGLE_PREFIX + 'Unable to find \'{}\' in ranges {}'.format(name, google_sheet_ranges))
-        return
-
-    # Convert the hex string to RGB values
-    red, green, blue = bytes.fromhex(colour_hex)
-
-    # Make an update request
-    request = {
-        "repeatCell": {
-            "range": {
-                "startColumnIndex": column_start,
-                "endColumnIndex": column_end,
-                "startRowIndex": row_start,
-                "endRowIndex": row_end,
-                "sheetId": 0
-            },
-            "cell": {
-                "userEnteredFormat": {
-                    "backgroundColor": {
-                        "red": red / 255,
-                        "green": green / 255,
-                        "blue": blue / 255
-                    }
-                }
-            },
-            "fields": 'UserEnteredFormat(BackgroundColor)'
-        }
-    }
-
-    # Queue the change to be commited in the next batch
-    sheets_queued_changes.append(request)
+        # Queue the change to be commited in the next batch
+        sheets_queued_changes.append({'name': name, 'colour': colour_hex})
+    except Exception as e:
+        print(e)
+    finally:
+        if locked:
+            sheets_queue_lock.release()
 
 
 def sheets_commit_changes():
-    global sheets_queued_changes
+    locked = False
+    try:
+        # Gain exclusive access to the Sheets queue
+        if sheets_queue_lock.acquire(blocking=True):
+            locked = True
+        else:
+            raise Exception('Unable to acquire lock on Sheets queue')
 
-    # Only run if there are any changes queued
-    if sheets_queued_changes:
-        # Compile all pending changes into a request and send it off to the Sheets API
-        sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
-            "requests": sheets_queued_changes
-        }).execute()
+        # Don't do anything if there's nothing queued
+        if not sheets_queued_changes:
+            return
 
-        print(GOOGLE_PREFIX + 'Commited {} changes to Sheets'.format(len(sheets_queued_changes)))
+        # Try match each of the requested changes to cells within the ranges we are permitted to operate upon
+        requests = []
+        for range in google_sheet_ranges.split():
+            sheet_response = sheets \
+                                .values() \
+                                .get(spreadsheetId=google_sheet_id, range=range) \
+                                .execute()
+            sheet_values = sheet_response.get('values', [])
 
-        # Clear out the queue
-        sheets_queued_changes.clear()
+            # Make sure we got something
+            if not sheet_values:
+                print(GOOGLE_PREFIX + 'No data found for range {}'.format(range))
+                continue
+
+            # Get the x and y origin offset for this range
+            x_offset, y_offset = parse_a1_coords(range.split(':')[0])
+
+            # Iterate over each of the changes to be made
+            for pair in sheets_queued_changes:
+                # Try find the target name within the range
+                for y, row in enumerate(sheet_values):
+                    for x, value in enumerate(row):
+                        if value and value.lower() in pair['name'].lower():
+                            # Find the boundary of this cell
+                            column_start = x_offset + x
+                            column_end = x_offset + x + 1
+                            row_start = y_offset + y
+                            row_end = y_offset + y + 1
+
+                            # Convert the hex string to RGB values
+                            red, green, blue = bytes.fromhex(pair['colour'])
+
+                            # Make a request to change this cell's background colour to the one requested
+                            requests.append({
+                                "repeatCell": {
+                                    "range": {
+                                        "startColumnIndex": column_start,
+                                        "endColumnIndex": column_end,
+                                        "startRowIndex": row_start,
+                                        "endRowIndex": row_end,
+                                        "sheetId": 0
+                                    },
+                                    "cell": {
+                                        "userEnteredFormat": {
+                                            "backgroundColor": {
+                                                "red": red / 255,
+                                                "green": green / 255,
+                                                "blue": blue / 255
+                                            }
+                                        }
+                                    },
+                                    "fields": 'UserEnteredFormat(BackgroundColor)'
+                                }
+                            })
+
+        if requests:
+            # Compile all pending changes into a request and send it off to the Sheets API
+            sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
+                "requests": requests
+            }).execute()
+
+            print(GOOGLE_PREFIX + 'Commited {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
+
+            # Clear out the queue
+            sheets_queued_changes.clear()
+    except Exception as e:
+        print(e)
+    finally:
+        if locked:
+            sheets_queue_lock.release()
 
 
 def google_token_timer_refresh():
