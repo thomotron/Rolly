@@ -88,6 +88,7 @@ discord_bot_server = config['Discord']['bot_server']
 try:
     discord_bot_owners = config['Discord']['bot_owners'].split()
 except KeyError:
+    print('Couldn\'t read bot owners, defaulting to none')
     discord_bot_owners = []
 
 ##### Parse arguments ##################################################################################################
@@ -301,7 +302,7 @@ def sheets_commit_changes():
                 "requests": requests
             }).execute()
 
-            print(GOOGLE_PREFIX + 'Commited {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
+            print(GOOGLE_PREFIX + 'Committed {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
 
             # Clear out the queue
             sheets_queued_changes.clear()
@@ -528,6 +529,11 @@ async def on_raw_reaction_remove(event):
         sheet_update_user(user.display_name, 'ffffff')
 
 ##### Start the Discord bot ############################################################################################
+
+print(DISCORD_PREFIX + 'Starting Rolly')
+print(DISCORD_PREFIX + 'Owner IDs: ')
+for id in discord_bot_owners:
+    print(DISCORD_PREFIX + '    {}'.format(id))
 
 rolly_discord.run(discord_bot_token)
 
