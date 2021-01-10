@@ -201,7 +201,7 @@ def parse_a1_coords(a1):
     else:
         raise ValueError('Unable to process A1 string properly, are you sure it is valid?')
 
-
+sheets_queued_changes = []
 def sheet_update_user(name, colour_hex):
     """
     Updates the background colour of a user in Google Sheets
@@ -252,31 +252,46 @@ def sheet_update_user(name, colour_hex):
     red, green, blue = bytes.fromhex(colour_hex)
 
     # Make an update request
-    sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
-        "requests": [
-            {
-                "repeatCell": {
-                    "range": {
-                        "startColumnIndex": column_start,
-                        "endColumnIndex": column_end,
-                        "startRowIndex": row_start,
-                        "endRowIndex": row_end,
-                        "sheetId": 0
-                    },
-                    "cell": {
-                        "userEnteredFormat": {
-                            "backgroundColor": {
-                                "red": red/255,
-                                "green": green/255,
-                                "blue": blue/255
-                            }
-                        }
-                    },
-                    "fields": 'UserEnteredFormat(BackgroundColor)'
+    request = {
+        "repeatCell": {
+            "range": {
+                "startColumnIndex": column_start,
+                "endColumnIndex": column_end,
+                "startRowIndex": row_start,
+                "endRowIndex": row_end,
+                "sheetId": 0
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "backgroundColor": {
+                        "red": red / 255,
+                        "green": green / 255,
+                        "blue": blue / 255
+                    }
                 }
-            }
-        ]
-    }).execute()
+            },
+            "fields": 'UserEnteredFormat(BackgroundColor)'
+        }
+    }
+
+    # Queue the change to be commited in the next batch
+    sheets_queued_changes.append(request)
+
+
+def sheets_commit_changes():
+    global sheets_queued_changes
+
+    # Only run if there are any changes queued
+    if sheets_queued_changes:
+        # Compile all pending changes into a request and send it off to the Sheets API
+        sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
+            "requests": sheets_queued_changes
+        }).execute()
+
+        print(GOOGLE_PREFIX + 'Commited {} changes to Sheets'.format(len(sheets_queued_changes)))
+
+        # Clear out the queue
+        sheets_queued_changes.clear()
 
 
 def google_token_timer_refresh():
@@ -290,11 +305,20 @@ def google_token_timer_refresh():
 google_token_timer = RepeatingTimer(600, google_token_timer_refresh)
 google_token_timer.start()
 
+##### Start a timer to flush through changes to Sheets #################################################################
+
+sheets_commit_changes_timer = RepeatingTimer(3, sheets_commit_changes)
+sheets_commit_changes_timer.start()
+
 ##### Set up the Discord bot ###########################################################################################
 
 rolly_discord = discord.Client()
 
-reaction_colours = {'✅':'00ff00', '❔':'ffff00', '❌':'ff0000'}
+reaction_colours = {
+    '✅':'00ff00',
+    '❔':'ffff00',
+    '❌':'ff0000'
+}
 
 @rolly_discord.event
 async def on_ready():
@@ -429,7 +453,7 @@ async def on_raw_reaction_add(event):
     # Check if it was on a message we sent
     if str(message.author.id) == discord_id:
         # Grab the user that reacted and the emoji
-        user = channel.guild.get_member(event.user_id)
+        user = await channel.guild.fetch_member(event.user_id)
         emoji = event.emoji.name
 
         # Ignore reacts that we make
@@ -459,7 +483,7 @@ async def on_raw_reaction_remove(event):
     # Check if it was on a message we sent
     if str(message.author.id) == discord_id:
         # Grab the user that reacted and the emoji
-        user = channel.guild.get_member(event.user_id)
+        user = await channel.guild.fetch_member(event.user_id)
         emoji = event.emoji.name
 
         # Ignore reacts that we make
