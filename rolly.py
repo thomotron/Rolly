@@ -242,73 +242,83 @@ def sheets_commit_changes():
         if not sheets_queued_changes:
             return
 
-        # Try match each of the requested changes to cells within the ranges we are permitted to operate upon
-        requests = []
-        for range in google_sheet_ranges.split():
-            sheet_response = sheets \
-                                .values() \
-                                .get(spreadsheetId=google_sheet_id, range=range) \
-                                .execute()
-            sheet_values = sheet_response.get('values', [])
+        try:
+            # Try match each of the requested changes to cells within the ranges we are permitted to operate upon
+            requests = []
+            for range in google_sheet_ranges.split():
+                sheet_response = sheets \
+                                    .values() \
+                                    .get(spreadsheetId=google_sheet_id, range=range) \
+                                    .execute()
+                sheet_values = sheet_response.get('values', [])
 
-            # Make sure we got something
-            if not sheet_values:
-                print(GOOGLE_PREFIX + 'No data found for range {}'.format(range))
-                continue
+                # Make sure we got something
+                if not sheet_values:
+                    print(GOOGLE_PREFIX + 'No data found for range {}'.format(range))
+                    continue
 
-            # Get the x and y origin offset for this range
-            x_offset, y_offset = parse_a1_coords(range.split(':')[0])
+                # Get the x and y origin offset for this range
+                x_offset, y_offset = parse_a1_coords(range.split(':')[0])
 
-            # Iterate over each of the changes to be made
-            for pair in sheets_queued_changes:
-                # Try find the target name within the range
-                for y, row in enumerate(sheet_values):
-                    for x, value in enumerate(row):
-                        if value and value.lower() in pair['name'].lower():
-                            # Find the boundary of this cell
-                            column_start = x_offset + x
-                            column_end = x_offset + x + 1
-                            row_start = y_offset + y
-                            row_end = y_offset + y + 1
+                # Iterate over each of the changes to be made
+                for pair in sheets_queued_changes:
+                    # Try find the target name within the range
+                    for y, row in enumerate(sheet_values):
+                        for x, value in enumerate(row):
+                            if value and value.lower() in pair['name'].lower():
+                                # Find the boundary of this cell
+                                column_start = x_offset + x
+                                column_end = x_offset + x + 1
+                                row_start = y_offset + y
+                                row_end = y_offset + y + 1
 
-                            # Convert the hex string to RGB values
-                            red, green, blue = bytes.fromhex(pair['colour'])
+                                # Convert the hex string to RGB values
+                                red, green, blue = bytes.fromhex(pair['colour'])
 
-                            # Make a request to change this cell's background colour to the one requested
-                            requests.append({
-                                "repeatCell": {
-                                    "range": {
-                                        "startColumnIndex": column_start,
-                                        "endColumnIndex": column_end,
-                                        "startRowIndex": row_start,
-                                        "endRowIndex": row_end,
-                                        "sheetId": 0
-                                    },
-                                    "cell": {
-                                        "userEnteredFormat": {
-                                            "backgroundColor": {
-                                                "red": red / 255,
-                                                "green": green / 255,
-                                                "blue": blue / 255
+                                # Make a request to change this cell's background colour to the one requested
+                                requests.append({
+                                    "repeatCell": {
+                                        "range": {
+                                            "startColumnIndex": column_start,
+                                            "endColumnIndex": column_end,
+                                            "startRowIndex": row_start,
+                                            "endRowIndex": row_end,
+                                            "sheetId": 0
+                                        },
+                                        "cell": {
+                                            "userEnteredFormat": {
+                                                "backgroundColor": {
+                                                    "red": red / 255,
+                                                    "green": green / 255,
+                                                    "blue": blue / 255
+                                                }
                                             }
-                                        }
-                                    },
-                                    "fields": 'UserEnteredFormat(BackgroundColor)'
-                                }
-                            })
+                                        },
+                                        "fields": 'UserEnteredFormat(BackgroundColor)'
+                                    }
+                                })
+        except Exception as e:
+            print(GOOGLE_PREFIX + 'Failed to get sheet data, will try again later. Original exception: ' + e)
+            return
 
         if requests:
             # Compile all pending changes into a request and send it off to the Sheets API
-            sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
-                "requests": requests
-            }).execute()
+            try:
+                sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
+                    "requests": requests
+                }).execute()
 
-            print(GOOGLE_PREFIX + 'Committed {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
+                print(GOOGLE_PREFIX + 'Committed {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
 
-            # Clear out the queue
-            sheets_queued_changes.clear()
+                # Clear out the queue
+                sheets_queued_changes.clear()
+            except Exception as e:
+                print(GOOGLE_PREFIX + 'Failed to commit sheets changes, will try again later. Original exception: ' + e)
+                return
+
     except Exception as e:
-        print(e)
+        print(GOOGLE_PREFIX + 'Unexpected error while updating sheet: ' + e)
+        return
     finally:
         if locked:
             sheets_queue_lock.release()
