@@ -1,13 +1,14 @@
 #!/bin/python3
-import datetime
 import os
 import re
+import math
 import discord
 import httplib2
 import pickle
 from argparse import ArgumentParser
 from configparser import ConfigParser
 from threading import Thread, Event, RLock
+from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from oauth2client.client import OAuth2WebServerFlow
 
@@ -104,7 +105,7 @@ def google_refresh_tokens():
     if google_credentials and not google_credentials.invalid:
         google_credentials.refresh(httplib2.Http())
         print(GOOGLE_PREFIX + 'Refreshed tokens')
-        print(GOOGLE_PREFIX + 'New token expires in ' + str(datetime.datetime.now() - google_credentials.token_expiry))
+        print(GOOGLE_PREFIX + 'New token expires in ' + str(google_credentials.token_expiry - datetime.now()))
 
         # Pickle the credentials object
         with open(CREDENTIALS_FILE, 'wb') as file:
@@ -204,8 +205,10 @@ def parse_a1_coords(a1):
         raise ValueError('Unable to process A1 string properly, are you sure it is valid?')
 
 
-sheets_queue_lock = RLock()
+sheets_queue_lock = RLock()  # Protects concurrency of all of the below variables
 sheets_queued_changes = []
+sheets_next_request_after = datetime.now()
+sheets_retries = 0
 def sheet_update_user(name, colour_hex):
     """
     Updates the background colour of a user in Google Sheets
@@ -238,8 +241,8 @@ def sheets_commit_changes():
         else:
             raise Exception('Unable to acquire lock on Sheets queue')
 
-        # Don't do anything if there's nothing queued
-        if not sheets_queued_changes:
+        # Don't do anything if we're called too early or there's nothing queued
+        if datetime.now() < sheets_next_request_after or not sheets_queued_changes:
             return
 
         try:
@@ -298,7 +301,9 @@ def sheets_commit_changes():
                                     }
                                 })
         except Exception as e:
-            print(GOOGLE_PREFIX + 'Failed to get sheet data, will try again later. Original exception: ' + e)
+            # Delay next execution exponentially up to 32s
+            sheets_increment_retry_delay()
+            print(GOOGLE_PREFIX + 'Failed to get sheet data, will try again in {}. Original exception: {}'.format(sheets_next_request_after - datetime.now(), str(e)))
             return
 
         if requests:
@@ -312,17 +317,40 @@ def sheets_commit_changes():
 
                 # Clear out the queue
                 sheets_queued_changes.clear()
+                sheets_clear_retry_delay()
             except Exception as e:
-                print(GOOGLE_PREFIX + 'Failed to commit sheets changes, will try again later. Original exception: ' + e)
+                sheets_increment_retry_delay()
+                print(GOOGLE_PREFIX + 'Failed to commit sheets changes, will try again in {}. Original exception: {}'.format(sheets_next_request_after - datetime.now(), str(e)))
                 return
 
     except Exception as e:
-        print(GOOGLE_PREFIX + 'Unexpected error while updating sheet: ' + e)
+        print(GOOGLE_PREFIX + 'Unexpected error while updating sheet: ' + str(e))
         return
     finally:
         if locked:
             sheets_queue_lock.release()
 
+def sheets_increment_retry_delay():
+    """
+    Increments sheets_retries and sheets_next_request_after according to Google's recommended exponential backoff algorithm.
+    """
+    global sheets_retries, sheets_next_request_after
+
+    # Increment retries
+    sheets_retries = sheets_retries + 1
+
+    # Calculate delay as 2^sheets_retries up to 32s
+    delay = math.pow(2, min(sheets_retries, 5))
+    sheets_next_request_after = datetime.now() + timedelta(seconds=delay)
+
+def sheets_clear_retry_delay():
+    """
+    Clears sheets_retries and sheets_next_request_after.
+    """
+    global sheets_retries, sheets_next_request_after
+
+    sheets_retries = 0
+    sheets_next_request_after = datetime.now()
 
 def google_token_timer_refresh():
     if not google_refresh_tokens():
