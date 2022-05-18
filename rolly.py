@@ -27,20 +27,20 @@ config.read(config_path)
 if not config.sections():
     print('No existing config was found, creating default...')
     with open('rolly.conf', 'w') as file:
-        file.write('' +
-            '[Google]' +
-            'client_id = ' +
-            'client_secret = ' +
-            'redirect_url = ' +
-            'sheet_id = ' +
-            'sheet_ranges = ' +
-            '' +
-            '[Discord]' +
-            'client_id = ' +
-            'client_secret = ' +
-            'bot_token = ' +
-            'bot_owners = []' +
-            'bot_server = ')
+        file.write(
+            '[Google]\n' +
+            'client_id = \n' +
+            'client_secret = \n' +
+            'redirect_url = \n' +
+            'sheet_id = \n' +
+            'sheet_ranges = \n' +
+            '\n' +
+            '[Discord]\n' +
+            'client_id = \n' +
+            'client_secret = \n' +
+            'bot_token = \n' +
+            'bot_owners = []\n' +
+            'bot_server = \n')
     exit(1)
 
 if 'Google' not in config:
