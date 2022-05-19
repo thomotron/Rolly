@@ -100,7 +100,7 @@ def init_from_config():
 
     if not config.sections():
         print("No existing config was found, creating default...")
-        with open("rolly.conf", "w") as file:
+        with open(config_path, "w") as file:
             file.write(
                 "[Google]\n"
                 + "client_id = \n"
