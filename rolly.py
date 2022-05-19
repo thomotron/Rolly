@@ -5,6 +5,7 @@ import math
 import discord
 import httplib2
 import pickle
+from argparse import ArgumentParser
 from configparser import ConfigParser
 from threading import Thread, Event, RLock
 from datetime import datetime, timedelta
@@ -58,6 +59,35 @@ class RepeatingTimer(Thread):
 
 
 # Define some functions
+def init_from_args():
+    """
+    Parses command-line arguments and applies them to the corresponding globals.
+    """
+    global config_path, credentials_file
+
+    # Configure parser
+    parser = ArgumentParser()
+    parser.add_argument(
+        "-c",
+        "--config",
+        metavar="PATH",
+        help="Path to configuration file (default: rolly.py)",
+    )
+    parser.add_argument(
+        "-d",
+        "--credentials",
+        metavar="PATH",
+        help="Path to credential cache (default: credentials.pkl)",
+    )
+    args = parser.parse_args()
+
+    # Parse provided arguments
+    if args.config:
+        config_path = args.config
+    if args.credentials:
+        credentials_file = args.credentials
+
+
 def init_from_config():
     """
     Reads in config and applies it to the corresponding globals.
@@ -631,7 +661,8 @@ async def on_raw_reaction_remove(event):
 
 
 if __name__ == "__main__":
-    # Read in and apply config
+    # Read in args and config then apply accordingly
+    init_from_args()
     init_from_config()
 
     # Load in Google credentials and/or prompt for OAuth authorisation
