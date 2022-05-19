@@ -6,4 +6,4 @@ RUN pip install -r requirements.txt
 
 COPY rolly.py ./
 
-CMD ["python3", "rolly.py"]
+ENTRYPOINT ["python3", "rolly.py"]
