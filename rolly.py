@@ -5,148 +5,40 @@ import math
 import discord
 import httplib2
 import pickle
-from argparse import ArgumentParser
 from configparser import ConfigParser
 from threading import Thread, Event, RLock
 from datetime import datetime, timedelta
+from discord import Client
 from googleapiclient.discovery import build
-from oauth2client.client import OAuth2WebServerFlow
+from oauth2client.client import OAuth2WebServerFlow, OAuth2Credentials
 
-# Define some constants
+# Define constants
 DISCORD_PREFIX = "[Discord] "
 GOOGLE_PREFIX = "[Google] "
-CREDENTIALS_FILE = "credentials.pkl"
 
-# Read in our ID and secret from config
-config = ConfigParser()
-config_path = "rolly.conf"
-config.read(config_path)
+# Define globals
+config: ConfigParser = None
+config_path: str = "rolly.conf"
+google_id: str = None
+google_secret: str = None
+google_redirect: str = None
+google_sheet_id: str = None
+google_sheet_ranges: str = None
+google_credentials: OAuth2Credentials = None
+credentials_file: str = "credentials.pkl"
+discord_id: str = None
+discord_bot_token: str = None
+discord_bot_server: str = None
+discord_bot_owners: list[str] = []
+sheets = None
+rolly_discord: Client = discord.Client()
+reaction_colours: dict[str, str] = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
 
-if not config.sections():
-    print("No existing config was found, creating default...")
-    with open("rolly.conf", "w") as file:
-        file.write(
-            "[Google]\n"
-            + "client_id = \n"
-            + "client_secret = \n"
-            + "redirect_url = \n"
-            + "sheet_id = \n"
-            + "sheet_ranges = \n"
-            + "\n"
-            + "[Discord]\n"
-            + "client_id = \n"
-            + "client_secret = \n"
-            + "bot_token = \n"
-            + "bot_owners = []\n"
-            + "bot_server = \n"
-        )
-    exit(1)
-
-if "Google" not in config:
-    print("Failed to read config: 'Google' section missing")
-    exit(1)
-if "client_id" not in config["Google"]:
-    print("Failed to read config: 'client_id' missing from section 'Google'")
-    exit(1)
-if "client_secret" not in config["Google"]:
-    print("Failed to read config: 'client_secret' missing from section 'Google'")
-    exit(1)
-if "redirect_url" not in config["Google"]:
-    print("Failed to read config: 'redirect_url' missing from section 'Google'")
-    exit(1)
-if "sheet_id" not in config["Google"]:
-    print("Failed to read config: 'sheet_id' missing from section 'Google'")
-    exit(1)
-if "sheet_ranges" not in config["Google"]:
-    print("Failed to read config: 'sheet_ranges' missing from section 'Google'")
-    exit(1)
-
-if "Discord" not in config:
-    print("Failed to read config: 'Discord' section missing")
-    exit(1)
-if "client_id" not in config["Discord"]:
-    print("Failed to read config: 'client_id' missing from section 'Discord'")
-    exit(1)
-if "bot_token" not in config["Discord"]:
-    print("Failed to read config: 'bot_token' missing from section 'Discord'")
-    exit(1)
-# if 'bot_owner' not in config['Discord']:
-#     print('Failed to read config: \'bot_owner\' missing from section \'Discord\'')
-#     exit(1)
-if "bot_server" not in config["Discord"]:
-    print("Failed to read config: 'bot_server' missing from section 'Discord'")
-    exit(1)
-
-google_id = config["Google"]["client_id"]
-google_secret = config["Google"]["client_secret"]
-google_redirect = config["Google"]["redirect_url"]
-google_sheet_id = config["Google"]["sheet_id"]
-google_sheet_ranges = config["Google"]["sheet_ranges"]
-
-discord_id = config["Discord"]["client_id"]
-discord_bot_token = config["Discord"]["bot_token"]
-discord_bot_server = config["Discord"]["bot_server"]
-try:
-    discord_bot_owners = config["Discord"]["bot_owners"].split()
-except KeyError:
-    print("Couldn't read bot owners, defaulting to none")
-    discord_bot_owners = []
-
-# Parse arguments
-parser = ArgumentParser()
-args = parser.parse_args()
-
-# Authorise with Google
-google_credentials = None
-
-
-def google_refresh_tokens():
-    if google_credentials and not google_credentials.invalid:
-        google_credentials.refresh(httplib2.Http())
-        print(GOOGLE_PREFIX + "Refreshed tokens")
-        print(
-            GOOGLE_PREFIX
-            + "New token expires in "
-            + str(google_credentials.token_expiry - datetime.now())
-        )
-
-        # Pickle the credentials object
-        with open(CREDENTIALS_FILE, "wb") as file:
-            pickle.dump(google_credentials, file)
-
-        return True
-    else:
-        print(GOOGLE_PREFIX + "Failed to refresh tokens, credentials are invalid now")
-        return False
-
-
-if os.path.exists(CREDENTIALS_FILE):
-    with open(CREDENTIALS_FILE, "rb") as file:
-        google_credentials = pickle.load(file)
-
-if not google_refresh_tokens():
-    flow = OAuth2WebServerFlow(
-        client_id=google_id,
-        client_secret=google_secret,
-        scope="https://www.googleapis.com/auth/spreadsheets",
-        redirect_uri=google_redirect,
-        prompt="consent",
-    )
-
-    google_auth_uri = flow.step1_get_authorize_url()
-
-    print("Please authorise yourself at the below URL and paste the code here")
-    print(google_auth_uri)
-    google_auth_code = input("Code: ")
-    google_credentials = flow.step2_exchange(google_auth_code)
-
-    # Pickle the credentials object
-    with open(CREDENTIALS_FILE, "wb") as file:
-        pickle.dump(google_credentials, file)
-
-# Set up the Google Sheets service
-sheets_service = build("sheets", "v4", credentials=google_credentials)
-sheets = sheets_service.spreadsheets()
+# Protect concurrency of sheets_queued_changes, sheets_next_request_after, and sheets_retries
+sheets_queue_lock: RLock = RLock()
+sheets_queued_changes: list[any] = []
+sheets_next_request_after: datetime = datetime.now()
+sheets_retries: int = 0
 
 
 # Define some classes
@@ -166,6 +58,135 @@ class RepeatingTimer(Thread):
 
 
 # Define some functions
+def init_from_config():
+    """
+    Reads in config and applies it to the corresponding globals.
+    """
+    global config, google_id, google_secret, google_redirect, google_sheet_id, google_sheet_ranges, discord_id, discord_bot_token, discord_bot_server, discord_bot_owners
+
+    # Read in our ID and secret from config
+    config = ConfigParser()
+    config.read(config_path)
+
+    if not config.sections():
+        print("No existing config was found, creating default...")
+        with open("rolly.conf", "w") as file:
+            file.write(
+                "[Google]\n"
+                + "client_id = \n"
+                + "client_secret = \n"
+                + "redirect_url = \n"
+                + "sheet_id = \n"
+                + "sheet_ranges = \n"
+                + "\n"
+                + "[Discord]\n"
+                + "client_id = \n"
+                + "client_secret = \n"
+                + "bot_token = \n"
+                + "bot_owners = []\n"
+                + "bot_server = \n"
+            )
+        exit(1)
+
+    # Check that all mandatory config options are present
+    mandatory_sections = {
+        "Google": [
+            "client_id",
+            "client_secret",
+            "redirect_url",
+            "sheet_id",
+            "sheet_ranges",
+        ],
+        "Discord": ["client_id", "bot_token", "bot_server"],
+    }
+    for section, keys in mandatory_sections.items():
+        if section not in config:
+            print("Failed to read config: '%s' section missing" % section)
+            exit(1)
+        else:
+            for key in keys:
+                if key not in config[section]:
+                    print(
+                        "Failed to read config: '%s' missing from section '%s'"
+                        % (key, section)
+                    )
+                    exit(1)
+
+    # Apply config
+    google_id = config["Google"]["client_id"]
+    google_secret = config["Google"]["client_secret"]
+    google_redirect = config["Google"]["redirect_url"]
+    google_sheet_id = config["Google"]["sheet_id"]
+    google_sheet_ranges = config["Google"]["sheet_ranges"]
+
+    discord_id = config["Discord"]["client_id"]
+    discord_bot_token = config["Discord"]["bot_token"]
+    discord_bot_server = config["Discord"]["bot_server"]
+    try:
+        discord_bot_owners = config["Discord"]["bot_owners"].split()
+    except KeyError:
+        print("Couldn't read bot owners, defaulting to none")
+        discord_bot_owners = []
+
+
+def google_refresh_tokens():
+    """
+    Refreshes Google API tokens and saves them to disk.
+    """
+    if google_credentials and not google_credentials.invalid:
+        google_credentials.refresh(httplib2.Http())
+        print(GOOGLE_PREFIX + "Refreshed tokens")
+        print(
+            GOOGLE_PREFIX
+            + "New token expires in "
+            + str(google_credentials.token_expiry - datetime.now())
+        )
+
+        # Pickle the credentials object
+        with open(credentials_file, "wb") as file:
+            pickle.dump(google_credentials, file)
+
+        return True
+    else:
+        print(GOOGLE_PREFIX + "Failed to refresh tokens, credentials are invalid now")
+        return False
+
+
+def google_load_credentials():
+    """
+    Loads Google API credentials from disk.
+    """
+    global google_credentials, sheets
+
+    if os.path.exists(credentials_file):
+        with open(credentials_file, "rb") as file:
+            google_credentials = pickle.load(file)
+
+    if not google_refresh_tokens():
+        flow = OAuth2WebServerFlow(
+            client_id=google_id,
+            client_secret=google_secret,
+            scope="https://www.googleapis.com/auth/spreadsheets",
+            redirect_uri=google_redirect,
+            prompt="consent",
+        )
+
+        google_auth_uri = flow.step1_get_authorize_url()
+
+        print("Please authorise yourself at the below URL and paste the code here")
+        print(google_auth_uri)
+        google_auth_code = input("Code: ")
+        google_credentials = flow.step2_exchange(google_auth_code)
+
+        # Pickle the credentials object
+        with open(credentials_file, "wb") as file:
+            pickle.dump(google_credentials, file)
+
+    # Set up the Google Sheets service
+    sheets_service = build("sheets", "v4", credentials=google_credentials)
+    sheets = sheets_service.spreadsheets()
+
+
 async def setup(channel, message_content=""):
     """
     Creates a roll call message in the given channel
@@ -176,18 +197,6 @@ async def setup(channel, message_content=""):
     await message.add_reaction("✅")
     await message.add_reaction("❔")
     await message.add_reaction("❌")
-
-
-def contains_other(str_a, str_b):
-    """
-    Compares two strings to see if they contain each other, ignoring case
-    :param str_a: String to compare
-    :param str_b: String to compare
-    :return: True if one contains the other, otherwise false
-    """
-    return (str_a.strip().lower() in str_b.strip().lower()) or (
-        str_b.strip().lower() in str_a.strip().lower()
-    )
 
 
 def parse_a1_coords(a1):
@@ -205,24 +214,18 @@ def parse_a1_coords(a1):
         items = match.groups()
         if len(items) == 3:
             # return items[2:3]
-            def colNameToNum(cn):
+            def col_name_to_num(cn):
                 return sum(
                     [((ord(cn[-1 - pos]) - 64) * 26**pos) for pos in range(len(cn))]
                 )
 
-            return colNameToNum(items[1]) - 1, int(items[2]) - 1
+            return col_name_to_num(items[1]) - 1, int(items[2]) - 1
         else:
             raise ValueError("Got more parts than expected.")
     else:
         raise ValueError(
             "Unable to process A1 string properly, are you sure it is valid?"
         )
-
-
-sheets_queue_lock = RLock()  # Protects concurrency of all of the below variables
-sheets_queued_changes = []
-sheets_next_request_after = datetime.now()
-sheets_retries = 0
 
 
 def sheet_update_user(name, colour_hex):
@@ -249,6 +252,9 @@ def sheet_update_user(name, colour_hex):
 
 
 def sheets_commit_changes():
+    """
+    Commits any outstanding changes in sheets_queue_lock to Google Sheets.
+    """
     locked = False
     try:
         # Gain exclusive access to the Sheets queue
@@ -258,7 +264,7 @@ def sheets_commit_changes():
             raise Exception("Unable to acquire lock on Sheets queue")
 
         # Don't do anything if we're called too early or there's nothing queued
-        if datetime.now() < sheets_next_request_after or not sheets_queued_changes:
+        if datetime.now() <= sheets_next_request_after or not sheets_queued_changes:
             return
 
         try:
@@ -395,20 +401,6 @@ def google_token_timer_refresh():
         google_token_timer.stop()
 
 
-# Start a timer to keep our Google tokens refreshed
-google_token_timer = RepeatingTimer(600, google_token_timer_refresh)
-google_token_timer.start()
-
-# Start a timer to flush through changes to Sheets
-sheets_commit_changes_timer = RepeatingTimer(3, sheets_commit_changes)
-sheets_commit_changes_timer.start()
-
-# Set up the Discord bot
-rolly_discord = discord.Client()
-
-reaction_colours = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
-
-
 @rolly_discord.event
 async def on_ready():
     print(DISCORD_PREFIX + "Bot logged in!")
@@ -430,7 +422,6 @@ async def on_message(message):
         return
 
     # Determine what prefix was used to address us, if any
-    prefix = ""
     if message.content.startswith("#rolly"):
         prefix = "#rolly"
     elif message.content.startswith("<@" + str(discord_id) + ">"):
@@ -490,12 +481,6 @@ async def on_message(message):
 
         elif args[0] == "ranges":
             # List off the current ranges
-            # message_str = 'Current allowed ranges are: `'
-            # if len(config['Google']['sheet_ranges']) < 3:
-            #     message_str = message_str + '`, and `'.join(config['Google']['sheet_ranges'])
-            # else:
-            #     message_str = message_str + '`, `'.join(config['Google']['sheet_ranges'][:-1]) + '`, and `' + config['Google']['sheet_ranges'][-1]
-            # message_str = message_str + '`'
             message_str = (
                 "Current allowed ranges are: `" + config["Google"]["sheet_ranges"] + "`"
             )
@@ -545,8 +530,6 @@ async def on_message(message):
                 google_sheet_ranges = " ".join(args[1:])
                 with open(config_path, "w") as file:
                     config.write(file)
-
-        # TODO: Add better range modification commands (i.e. ranges, addranges, removeranges)
 
     # Delete the command
     await message.delete()
@@ -648,13 +631,27 @@ async def on_raw_reaction_remove(event):
         sheet_update_user(user.display_name, "ffffff")
 
 
-# Start the Discord bot
-print(DISCORD_PREFIX + "Starting Rolly")
-print(DISCORD_PREFIX + "Owner IDs: ")
-for id in discord_bot_owners:
-    print(DISCORD_PREFIX + "    {}".format(id))
+if __name__ == "__main__":
+    # Read in and apply config
+    init_from_config()
 
-rolly_discord.run(discord_bot_token)
+    # Load in Google credentials and/or prompt for OAuth authorisation
+    google_load_credentials()
 
-# Stop the token refresh timer
-google_token_timer.stop()
+    # Start a timer to keep our Google tokens refreshed
+    google_token_timer = RepeatingTimer(600, google_token_timer_refresh)
+    google_token_timer.start()
+
+    # Start a timer to flush through changes to Sheets
+    sheets_commit_changes_timer = RepeatingTimer(3, sheets_commit_changes)
+    sheets_commit_changes_timer.start()
+
+    # Start the Discord bot
+    print(DISCORD_PREFIX + "Starting Rolly")
+    print(DISCORD_PREFIX + "Owner IDs: ")
+    for id in discord_bot_owners:
+        print(DISCORD_PREFIX + "    {}".format(id))
+    rolly_discord.run(discord_bot_token)
+
+    # Stop the token refresh timer
+    google_token_timer.stop()
