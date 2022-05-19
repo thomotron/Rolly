@@ -194,9 +194,8 @@ async def setup(channel, message_content=""):
     :param message_content: Optional message content
     """
     message = await channel.send(message_content if message_content else "Roll call!")
-    await message.add_reaction("✅")
-    await message.add_reaction("❔")
-    await message.add_reaction("❌")
+    for key, _ in reaction_colours.items():
+        await message.add_reaction(key)
 
 
 def parse_a1_coords(a1):
