@@ -12,140 +12,144 @@ from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 from oauth2client.client import OAuth2WebServerFlow
 
-##### Define some constants ############################################################################################
+# Define some constants
+DISCORD_PREFIX = "[Discord] "
+GOOGLE_PREFIX = "[Google] "
+CREDENTIALS_FILE = "credentials.pkl"
 
-DISCORD_PREFIX = '[Discord] '
-GOOGLE_PREFIX = '[Google] '
-CREDENTIALS_FILE = 'credentials.pkl'
-
-##### Read in our ID and secret from config ############################################################################
-
+# Read in our ID and secret from config
 config = ConfigParser()
-config_path = 'rolly.conf'
+config_path = "rolly.conf"
 config.read(config_path)
 
 if not config.sections():
-    print('No existing config was found, creating default...')
-    with open('rolly.conf', 'w') as file:
+    print("No existing config was found, creating default...")
+    with open("rolly.conf", "w") as file:
         file.write(
-            '[Google]\n' +
-            'client_id = \n' +
-            'client_secret = \n' +
-            'redirect_url = \n' +
-            'sheet_id = \n' +
-            'sheet_ranges = \n' +
-            '\n' +
-            '[Discord]\n' +
-            'client_id = \n' +
-            'client_secret = \n' +
-            'bot_token = \n' +
-            'bot_owners = []\n' +
-            'bot_server = \n')
+            "[Google]\n"
+            + "client_id = \n"
+            + "client_secret = \n"
+            + "redirect_url = \n"
+            + "sheet_id = \n"
+            + "sheet_ranges = \n"
+            + "\n"
+            + "[Discord]\n"
+            + "client_id = \n"
+            + "client_secret = \n"
+            + "bot_token = \n"
+            + "bot_owners = []\n"
+            + "bot_server = \n"
+        )
     exit(1)
 
-if 'Google' not in config:
-    print('Failed to read config: \'Google\' section missing')
+if "Google" not in config:
+    print("Failed to read config: 'Google' section missing")
     exit(1)
-if 'client_id' not in config['Google']:
-    print('Failed to read config: \'client_id\' missing from section \'Google\'')
+if "client_id" not in config["Google"]:
+    print("Failed to read config: 'client_id' missing from section 'Google'")
     exit(1)
-if 'client_secret' not in config['Google']:
-    print('Failed to read config: \'client_secret\' missing from section \'Google\'')
+if "client_secret" not in config["Google"]:
+    print("Failed to read config: 'client_secret' missing from section 'Google'")
     exit(1)
-if 'redirect_url' not in config['Google']:
-    print('Failed to read config: \'redirect_url\' missing from section \'Google\'')
+if "redirect_url" not in config["Google"]:
+    print("Failed to read config: 'redirect_url' missing from section 'Google'")
     exit(1)
-if 'sheet_id' not in config['Google']:
-    print('Failed to read config: \'sheet_id\' missing from section \'Google\'')
+if "sheet_id" not in config["Google"]:
+    print("Failed to read config: 'sheet_id' missing from section 'Google'")
     exit(1)
-if 'sheet_ranges' not in config['Google']:
-    print('Failed to read config: \'sheet_ranges\' missing from section \'Google\'')
+if "sheet_ranges" not in config["Google"]:
+    print("Failed to read config: 'sheet_ranges' missing from section 'Google'")
     exit(1)
 
-if 'Discord' not in config:
-    print('Failed to read config: \'Discord\' section missing')
+if "Discord" not in config:
+    print("Failed to read config: 'Discord' section missing")
     exit(1)
-if 'client_id' not in config['Discord']:
-    print('Failed to read config: \'client_id\' missing from section \'Discord\'')
+if "client_id" not in config["Discord"]:
+    print("Failed to read config: 'client_id' missing from section 'Discord'")
     exit(1)
-if 'bot_token' not in config['Discord']:
-    print('Failed to read config: \'bot_token\' missing from section \'Discord\'')
+if "bot_token" not in config["Discord"]:
+    print("Failed to read config: 'bot_token' missing from section 'Discord'")
     exit(1)
 # if 'bot_owner' not in config['Discord']:
 #     print('Failed to read config: \'bot_owner\' missing from section \'Discord\'')
 #     exit(1)
-if 'bot_server' not in config['Discord']:
-    print('Failed to read config: \'bot_server\' missing from section \'Discord\'')
+if "bot_server" not in config["Discord"]:
+    print("Failed to read config: 'bot_server' missing from section 'Discord'")
     exit(1)
 
-google_id = config['Google']['client_id']
-google_secret = config['Google']['client_secret']
-google_redirect = config['Google']['redirect_url']
-google_sheet_id = config['Google']['sheet_id']
-google_sheet_ranges = config['Google']['sheet_ranges']
+google_id = config["Google"]["client_id"]
+google_secret = config["Google"]["client_secret"]
+google_redirect = config["Google"]["redirect_url"]
+google_sheet_id = config["Google"]["sheet_id"]
+google_sheet_ranges = config["Google"]["sheet_ranges"]
 
-discord_id = config['Discord']['client_id']
-discord_bot_token = config['Discord']['bot_token']
-discord_bot_server = config['Discord']['bot_server']
+discord_id = config["Discord"]["client_id"]
+discord_bot_token = config["Discord"]["bot_token"]
+discord_bot_server = config["Discord"]["bot_server"]
 try:
-    discord_bot_owners = config['Discord']['bot_owners'].split()
+    discord_bot_owners = config["Discord"]["bot_owners"].split()
 except KeyError:
-    print('Couldn\'t read bot owners, defaulting to none')
+    print("Couldn't read bot owners, defaulting to none")
     discord_bot_owners = []
 
-##### Parse arguments ##################################################################################################
-
+# Parse arguments
 parser = ArgumentParser()
 args = parser.parse_args()
 
-##### Authorise with Google ############################################################################################
-
+# Authorise with Google
 google_credentials = None
+
+
 def google_refresh_tokens():
     if google_credentials and not google_credentials.invalid:
         google_credentials.refresh(httplib2.Http())
-        print(GOOGLE_PREFIX + 'Refreshed tokens')
-        print(GOOGLE_PREFIX + 'New token expires in ' + str(google_credentials.token_expiry - datetime.now()))
+        print(GOOGLE_PREFIX + "Refreshed tokens")
+        print(
+            GOOGLE_PREFIX
+            + "New token expires in "
+            + str(google_credentials.token_expiry - datetime.now())
+        )
 
         # Pickle the credentials object
-        with open(CREDENTIALS_FILE, 'wb') as file:
+        with open(CREDENTIALS_FILE, "wb") as file:
             pickle.dump(google_credentials, file)
 
         return True
     else:
-        print(GOOGLE_PREFIX + 'Failed to refresh tokens, credentials are invalid now')
+        print(GOOGLE_PREFIX + "Failed to refresh tokens, credentials are invalid now")
         return False
 
 
 if os.path.exists(CREDENTIALS_FILE):
-    with open(CREDENTIALS_FILE, 'rb') as file:
+    with open(CREDENTIALS_FILE, "rb") as file:
         google_credentials = pickle.load(file)
 
 if not google_refresh_tokens():
-    flow = OAuth2WebServerFlow(client_id=google_id,
-                               client_secret=google_secret,
-                               scope='https://www.googleapis.com/auth/spreadsheets',
-                               redirect_uri=google_redirect,
-                               prompt='consent')
+    flow = OAuth2WebServerFlow(
+        client_id=google_id,
+        client_secret=google_secret,
+        scope="https://www.googleapis.com/auth/spreadsheets",
+        redirect_uri=google_redirect,
+        prompt="consent",
+    )
 
     google_auth_uri = flow.step1_get_authorize_url()
 
     print("Please authorise yourself at the below URL and paste the code here")
     print(google_auth_uri)
-    google_auth_code = input('Code: ')
+    google_auth_code = input("Code: ")
     google_credentials = flow.step2_exchange(google_auth_code)
 
     # Pickle the credentials object
-    with open(CREDENTIALS_FILE, 'wb') as file:
+    with open(CREDENTIALS_FILE, "wb") as file:
         pickle.dump(google_credentials, file)
 
-##### Set up the Google Sheets service #################################################################################
-
-sheets_service = build('sheets', 'v4', credentials=google_credentials)
+# Set up the Google Sheets service
+sheets_service = build("sheets", "v4", credentials=google_credentials)
 sheets = sheets_service.spreadsheets()
 
-##### Define some classes ##############################################################################################
 
+# Define some classes
 class RepeatingTimer(Thread):
     def __init__(self, interval_seconds, callback):
         super().__init__()
@@ -160,18 +164,19 @@ class RepeatingTimer(Thread):
     def stop(self):
         self.stop_event.set()
 
-##### Define some functions ############################################################################################
 
-async def setup(channel, message_content = ''):
+# Define some functions
+async def setup(channel, message_content=""):
     """
     Creates a roll call message in the given channel
     :param channel: Channel to send a message to
     :param message_content: Optional message content
     """
-    message = await channel.send(message_content if message_content else 'Roll call!')
-    await message.add_reaction('✅')
-    await message.add_reaction('❔')
-    await message.add_reaction('❌')
+    message = await channel.send(message_content if message_content else "Roll call!")
+    await message.add_reaction("✅")
+    await message.add_reaction("❔")
+    await message.add_reaction("❌")
+
 
 def contains_other(str_a, str_b):
     """
@@ -180,7 +185,10 @@ def contains_other(str_a, str_b):
     :param str_b: String to compare
     :return: True if one contains the other, otherwise false
     """
-    return (str_a.strip().lower() in str_b.strip().lower()) or (str_b.strip().lower() in str_a.strip().lower())
+    return (str_a.strip().lower() in str_b.strip().lower()) or (
+        str_b.strip().lower() in str_a.strip().lower()
+    )
+
 
 def parse_a1_coords(a1):
     """
@@ -189,26 +197,34 @@ def parse_a1_coords(a1):
     :param a1: A1 string to parse
     :return: x and y coordinates as a list
     """
-    if ':' in a1:
-        raise ValueError('Cannot process an A1 range.')
+    if ":" in a1:
+        raise ValueError("Cannot process an A1 range.")
 
     match = re.match(r"(?:\w+!)?(([A-Z]+)([0-9]+))", a1, re.I)
     if match:
         items = match.groups()
         if len(items) == 3:
             # return items[2:3]
-            colNameToNum = lambda cn: sum([((ord(cn[-1 - pos]) - 64) * 26 ** pos) for pos in range(len(cn))])
+            def colNameToNum(cn):
+                return sum(
+                    [((ord(cn[-1 - pos]) - 64) * 26**pos) for pos in range(len(cn))]
+                )
+
             return colNameToNum(items[1]) - 1, int(items[2]) - 1
         else:
-            raise ValueError('Got more parts than expected.')
+            raise ValueError("Got more parts than expected.")
     else:
-        raise ValueError('Unable to process A1 string properly, are you sure it is valid?')
+        raise ValueError(
+            "Unable to process A1 string properly, are you sure it is valid?"
+        )
 
 
 sheets_queue_lock = RLock()  # Protects concurrency of all of the below variables
 sheets_queued_changes = []
 sheets_next_request_after = datetime.now()
 sheets_retries = 0
+
+
 def sheet_update_user(name, colour_hex):
     """
     Updates the background colour of a user in Google Sheets
@@ -221,10 +237,10 @@ def sheet_update_user(name, colour_hex):
         if sheets_queue_lock.acquire(blocking=True):
             locked = True
         else:
-            raise Exception('Unable to acquire lock on Sheets queue')
+            raise Exception("Unable to acquire lock on Sheets queue")
 
         # Queue the change to be commited in the next batch
-        sheets_queued_changes.append({'name': name, 'colour': colour_hex})
+        sheets_queued_changes.append({"name": name, "colour": colour_hex})
     except Exception as e:
         print(e)
     finally:
@@ -239,7 +255,7 @@ def sheets_commit_changes():
         if sheets_queue_lock.acquire(blocking=True):
             locked = True
         else:
-            raise Exception('Unable to acquire lock on Sheets queue')
+            raise Exception("Unable to acquire lock on Sheets queue")
 
         # Don't do anything if we're called too early or there's nothing queued
         if datetime.now() < sheets_next_request_after or not sheets_queued_changes:
@@ -249,26 +265,27 @@ def sheets_commit_changes():
             # Try match each of the requested changes to cells within the ranges we are permitted to operate upon
             requests = []
             for range in google_sheet_ranges.split():
-                sheet_response = sheets \
-                                    .values() \
-                                    .get(spreadsheetId=google_sheet_id, range=range) \
-                                    .execute()
-                sheet_values = sheet_response.get('values', [])
+                sheet_response = (
+                    sheets.values()
+                    .get(spreadsheetId=google_sheet_id, range=range)
+                    .execute()
+                )
+                sheet_values = sheet_response.get("values", [])
 
                 # Make sure we got something
                 if not sheet_values:
-                    print(GOOGLE_PREFIX + 'No data found for range {}'.format(range))
+                    print(GOOGLE_PREFIX + "No data found for range {}".format(range))
                     continue
 
                 # Get the x and y origin offset for this range
-                x_offset, y_offset = parse_a1_coords(range.split(':')[0])
+                x_offset, y_offset = parse_a1_coords(range.split(":")[0])
 
                 # Iterate over each of the changes to be made
                 for pair in sheets_queued_changes:
                     # Try find the target name within the range
                     for y, row in enumerate(sheet_values):
                         for x, value in enumerate(row):
-                            if value and value.lower() in pair['name'].lower():
+                            if value and value.lower() in pair["name"].lower():
                                 # Find the boundary of this cell
                                 column_start = x_offset + x
                                 column_end = x_offset + x + 1
@@ -276,59 +293,77 @@ def sheets_commit_changes():
                                 row_end = y_offset + y + 1
 
                                 # Convert the hex string to RGB values
-                                red, green, blue = bytes.fromhex(pair['colour'])
+                                red, green, blue = bytes.fromhex(pair["colour"])
 
                                 # Make a request to change this cell's background colour to the one requested
-                                requests.append({
-                                    "repeatCell": {
-                                        "range": {
-                                            "startColumnIndex": column_start,
-                                            "endColumnIndex": column_end,
-                                            "startRowIndex": row_start,
-                                            "endRowIndex": row_end,
-                                            "sheetId": 0
-                                        },
-                                        "cell": {
-                                            "userEnteredFormat": {
-                                                "backgroundColor": {
-                                                    "red": red / 255,
-                                                    "green": green / 255,
-                                                    "blue": blue / 255
+                                requests.append(
+                                    {
+                                        "repeatCell": {
+                                            "range": {
+                                                "startColumnIndex": column_start,
+                                                "endColumnIndex": column_end,
+                                                "startRowIndex": row_start,
+                                                "endRowIndex": row_end,
+                                                "sheetId": 0,
+                                            },
+                                            "cell": {
+                                                "userEnteredFormat": {
+                                                    "backgroundColor": {
+                                                        "red": red / 255,
+                                                        "green": green / 255,
+                                                        "blue": blue / 255,
+                                                    }
                                                 }
-                                            }
-                                        },
-                                        "fields": 'UserEnteredFormat(BackgroundColor)'
+                                            },
+                                            "fields": "UserEnteredFormat(BackgroundColor)",
+                                        }
                                     }
-                                })
+                                )
         except Exception as e:
             # Delay next execution exponentially up to 32s
             sheets_increment_retry_delay()
-            print(GOOGLE_PREFIX + 'Failed to get sheet data, will try again in {}. Original exception: {}'.format(sheets_next_request_after - datetime.now(), str(e)))
+            print(
+                GOOGLE_PREFIX
+                + "Failed to get sheet data, will try again in {}. Original exception: {}".format(
+                    sheets_next_request_after - datetime.now(), str(e)
+                )
+            )
             return
 
         if requests:
             # Compile all pending changes into a request and send it off to the Sheets API
             try:
-                sheets.batchUpdate(spreadsheetId=google_sheet_id, body={
-                    "requests": requests
-                }).execute()
+                sheets.batchUpdate(
+                    spreadsheetId=google_sheet_id, body={"requests": requests}
+                ).execute()
 
-                print(GOOGLE_PREFIX + 'Committed {} change{} to Sheets'.format(len(requests), 's' if len(requests) != 1 else ''))
+                print(
+                    GOOGLE_PREFIX
+                    + "Committed {} change{} to Sheets".format(
+                        len(requests), "s" if len(requests) != 1 else ""
+                    )
+                )
 
                 # Clear out the queue
                 sheets_queued_changes.clear()
                 sheets_clear_retry_delay()
             except Exception as e:
                 sheets_increment_retry_delay()
-                print(GOOGLE_PREFIX + 'Failed to commit sheets changes, will try again in {}. Original exception: {}'.format(sheets_next_request_after - datetime.now(), str(e)))
+                print(
+                    GOOGLE_PREFIX
+                    + "Failed to commit sheets changes, will try again in {}. Original exception: {}".format(
+                        sheets_next_request_after - datetime.now(), str(e)
+                    )
+                )
                 return
 
     except Exception as e:
-        print(GOOGLE_PREFIX + 'Unexpected error while updating sheet: ' + str(e))
+        print(GOOGLE_PREFIX + "Unexpected error while updating sheet: " + str(e))
         return
     finally:
         if locked:
             sheets_queue_lock.release()
+
 
 def sheets_increment_retry_delay():
     """
@@ -343,6 +378,7 @@ def sheets_increment_retry_delay():
     delay = math.pow(2, min(sheets_retries, 5))
     sheets_next_request_after = datetime.now() + timedelta(seconds=delay)
 
+
 def sheets_clear_retry_delay():
     """
     Clears sheets_retries and sheets_next_request_after.
@@ -352,40 +388,36 @@ def sheets_clear_retry_delay():
     sheets_retries = 0
     sheets_next_request_after = datetime.now()
 
+
 def google_token_timer_refresh():
     if not google_refresh_tokens():
-        print(GOOGLE_PREFIX + 'Stopping token timer since we cannot refresh anymore...')
+        print(GOOGLE_PREFIX + "Stopping token timer since we cannot refresh anymore...")
         google_token_timer.stop()
 
 
-##### Start a timer to keep our Google tokens refreshed ################################################################
-
+# Start a timer to keep our Google tokens refreshed
 google_token_timer = RepeatingTimer(600, google_token_timer_refresh)
 google_token_timer.start()
 
-##### Start a timer to flush through changes to Sheets #################################################################
-
+# Start a timer to flush through changes to Sheets
 sheets_commit_changes_timer = RepeatingTimer(3, sheets_commit_changes)
 sheets_commit_changes_timer.start()
 
-##### Set up the Discord bot ###########################################################################################
-
+# Set up the Discord bot
 rolly_discord = discord.Client()
 
-reaction_colours = {
-    '✅':'00ff00',
-    '❔':'ffff00',
-    '❌':'ff0000'
-}
+reaction_colours = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
+
 
 @rolly_discord.event
 async def on_ready():
-    print(DISCORD_PREFIX + 'Bot logged in!')
+    print(DISCORD_PREFIX + "Bot logged in!")
+
 
 @rolly_discord.event
 async def on_message(message):
     # Declare this globally here, since we use it early on, /and/ in a command
-    #global discord_bot_channel
+    # global discord_bot_channel
 
     # Make sure this is from the desired server
     if str(message.guild.id) != discord_bot_server:
@@ -398,11 +430,13 @@ async def on_message(message):
         return
 
     # Determine what prefix was used to address us, if any
-    prefix = ''
-    if message.content.startswith('#rolly'):
-        prefix = '#rolly'
-    elif message.content.startswith('<@' + str(discord_id) + '>'):
-        prefix = '@{}#{}'.format(rolly_discord.user.name, rolly_discord.user.discriminator)
+    prefix = ""
+    if message.content.startswith("#rolly"):
+        prefix = "#rolly"
+    elif message.content.startswith("<@" + str(discord_id) + ">"):
+        prefix = "@{}#{}".format(
+            rolly_discord.user.name, rolly_discord.user.discriminator
+        )
     else:
         # We weren't addressed, we can stop here
         return
@@ -412,41 +446,49 @@ async def on_message(message):
 
     # Return a message if no args are provided
     if not args:
-        await message.channel.send('Yo, I\'m Rolly. Try `{} create` to start a roll call.'.format(prefix), delete_after=30)
+        await message.channel.send(
+            "Yo, I'm Rolly. Try `{} create` to start a roll call.".format(prefix),
+            delete_after=30,
+        )
     else:
         # Declare some globals
         global google_sheet_ranges
         global google_sheet_id
 
         # Filter what command came through
-        if args[0] == 'help':
-            await message.channel.send('Here\'s a list of commands you can give me:\n' +
-                                       '\n' +
-                                       '`help` - Shows this help text\n' +
-                                       '`create` - Creates a new roll call message\n' +
-                                       '`setsheet` - Sets the Google Sheet ID to update\n' +
-                                       '`ranges` - Shows the current allowed ranges in the spreadsheet\n' +
-                                       '`addranges` - Add one or more allowed ranges for the spreadsheet\n' +
-                                       '`setranges` - Sets the ranges to update in the spreadsheet')
+        if args[0] == "help":
+            await message.channel.send(
+                "Here's a list of commands you can give me:\n"
+                + "\n"
+                + "`help` - Shows this help text\n"
+                + "`create` - Creates a new roll call message\n"
+                + "`setsheet` - Sets the Google Sheet ID to update\n"
+                + "`ranges` - Shows the current allowed ranges in the spreadsheet\n"
+                + "`addranges` - Add one or more allowed ranges for the spreadsheet\n"
+                + "`setranges` - Sets the ranges to update in the spreadsheet"
+            )
 
-        elif args[0] == 'create':
+        elif args[0] == "create":
             if len(args) > 1:
-                await setup(message.channel, ' '.join(args[1:]))
+                await setup(message.channel, " ".join(args[1:]))
             else:
                 await setup(message.channel)
 
-        elif args[0] == 'setsheet':
+        elif args[0] == "setsheet":
             # Make sure we've been given an ID
             if len(args) < 2:
-                await message.channel.send('I need a sheet ID to do that.\nYou can get it from the URL e.g. `https://docs.google.com/spreadsheets/d/<sheet id>/`', delete_after=30)
+                await message.channel.send(
+                    "I need a sheet ID to do that.\nYou can get it from the URL e.g. `https://docs.google.com/spreadsheets/d/<sheet id>/`",
+                    delete_after=30,
+                )
             else:
                 # Update and write config to file
-                config['Google']['sheet_id'] = args[1]
+                config["Google"]["sheet_id"] = args[1]
                 google_sheet_id = args[1]
-                with open(config_path, 'w') as file:
+                with open(config_path, "w") as file:
                     config.write(file)
 
-        elif args[0] == 'ranges':
+        elif args[0] == "ranges":
             # List off the current ranges
             # message_str = 'Current allowed ranges are: `'
             # if len(config['Google']['sheet_ranges']) < 3:
@@ -454,49 +496,61 @@ async def on_message(message):
             # else:
             #     message_str = message_str + '`, `'.join(config['Google']['sheet_ranges'][:-1]) + '`, and `' + config['Google']['sheet_ranges'][-1]
             # message_str = message_str + '`'
-            message_str = 'Current allowed ranges are: `' + config['Google']['sheet_ranges'] + '`'
+            message_str = (
+                "Current allowed ranges are: `" + config["Google"]["sheet_ranges"] + "`"
+            )
 
             await message.channel.send(message_str)
 
-        elif args[0] == 'addranges':
+        elif args[0] == "addranges":
             # Make sure we've been given a range
             if len(args) < 2:
-                await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.', delete_after=30)
+                await message.channel.send(
+                    "I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.",
+                    delete_after=30,
+                )
             else:
                 # Update and write config to file
-                new_ranges = config['Google']['sheet_ranges'] + ' ' + ' '.join(args[1:])
-                config['Google']['sheet_ranges'] = new_ranges
+                new_ranges = config["Google"]["sheet_ranges"] + " " + " ".join(args[1:])
+                config["Google"]["sheet_ranges"] = new_ranges
                 google_sheet_ranges = new_ranges
-                with open(config_path, 'w') as file:
+                with open(config_path, "w") as file:
                     config.write(file)
 
-        elif args[0] == 'addranges':
+        elif args[0] == "addranges":
             # Make sure we've been given a range
             if len(args) < 2:
-                await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.', delete_after=30)
+                await message.channel.send(
+                    "I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.",
+                    delete_after=30,
+                )
             else:
                 # Update and write config to file
-                new_ranges = config['Google']['sheet_ranges'] + ' ' + ' '.join(args[1:])
-                config['Google']['sheet_ranges'] = new_ranges
+                new_ranges = config["Google"]["sheet_ranges"] + " " + " ".join(args[1:])
+                config["Google"]["sheet_ranges"] = new_ranges
                 google_sheet_ranges = new_ranges
-                with open(config_path, 'w') as file:
+                with open(config_path, "w") as file:
                     config.write(file)
 
-        elif args[0] == 'setranges':
+        elif args[0] == "setranges":
             # Make sure we've been given a range
             if len(args) < 2:
-                await message.channel.send('I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.', delete_after=30)
+                await message.channel.send(
+                    "I need at least one range to do that.\nBy range I mean something like `C2`, `A3:B7`, or `Sheet2!H13:AC139`. You can include several, just separate them with a space.",
+                    delete_after=30,
+                )
             else:
                 # Update and write config to file
-                config['Google']['sheet_ranges'] = ' '.join(args[1:])
-                google_sheet_ranges = ' '.join(args[1:])
-                with open(config_path, 'w') as file:
+                config["Google"]["sheet_ranges"] = " ".join(args[1:])
+                google_sheet_ranges = " ".join(args[1:])
+                with open(config_path, "w") as file:
                     config.write(file)
 
         # TODO: Add better range modification commands (i.e. ranges, addranges, removeranges)
 
     # Delete the command
     await message.delete()
+
 
 @rolly_discord.event
 async def on_raw_reaction_add(event):
@@ -521,12 +575,23 @@ async def on_raw_reaction_add(event):
         # Report what's happened
         global reaction_colours
         if emoji in reaction_colours:
-            print(DISCORD_PREFIX + '{} reacted with \'{}\', changing their cell to {}'.format(user.display_name, emoji, reaction_colours[emoji]))
+            print(
+                DISCORD_PREFIX
+                + "{} reacted with '{}', changing their cell to {}".format(
+                    user.display_name, emoji, reaction_colours[emoji]
+                )
+            )
         else:
-            print(DISCORD_PREFIX + '{} reacted with unsupported emoji \'{}\''.format(user.display_name, emoji))
+            print(
+                DISCORD_PREFIX
+                + "{} reacted with unsupported emoji '{}'".format(
+                    user.display_name, emoji
+                )
+            )
             return
 
         sheet_update_user(user.display_name, reaction_colours[emoji])
+
 
 @rolly_discord.event
 async def on_raw_reaction_remove(event):
@@ -559,23 +624,37 @@ async def on_raw_reaction_remove(event):
             for react_user in await reaction.users().flatten():
                 if react_user.id == user.id:
                     # Use this emoji instead
-                    print(DISCORD_PREFIX + '{} removed their \'{}\' react, but they still have a \'{}\' react. Changing their cell to {}'.format(user.display_name, emoji, reaction.emoji, reaction_colours[reaction.emoji]))
-                    sheet_update_user(user.display_name, reaction_colours[reaction.emoji])
+                    print(
+                        DISCORD_PREFIX
+                        + "{} removed their '{}' react, but they still have a '{}' react. Changing their cell to {}".format(
+                            user.display_name,
+                            emoji,
+                            reaction.emoji,
+                            reaction_colours[reaction.emoji],
+                        )
+                    )
+                    sheet_update_user(
+                        user.display_name, reaction_colours[reaction.emoji]
+                    )
                     return
 
         # Didn't find an alternate emoji to use, clear their cell
-        print(DISCORD_PREFIX + '{} removed their \'{}\' react, changing their cell to {}'.format(user.display_name, emoji, 'ffffff'))
-        sheet_update_user(user.display_name, 'ffffff')
+        print(
+            DISCORD_PREFIX
+            + "{} removed their '{}' react, changing their cell to {}".format(
+                user.display_name, emoji, "ffffff"
+            )
+        )
+        sheet_update_user(user.display_name, "ffffff")
 
-##### Start the Discord bot ############################################################################################
 
-print(DISCORD_PREFIX + 'Starting Rolly')
-print(DISCORD_PREFIX + 'Owner IDs: ')
+# Start the Discord bot
+print(DISCORD_PREFIX + "Starting Rolly")
+print(DISCORD_PREFIX + "Owner IDs: ")
 for id in discord_bot_owners:
-    print(DISCORD_PREFIX + '    {}'.format(id))
+    print(DISCORD_PREFIX + "    {}".format(id))
 
 rolly_discord.run(discord_bot_token)
 
-##### Stop the token refresh timer #####################################################################################
-
+# Stop the token refresh timer
 google_token_timer.stop()
