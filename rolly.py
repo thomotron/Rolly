@@ -113,7 +113,7 @@ def init_from_config():
                 + "client_id = \n"
                 + "client_secret = \n"
                 + "bot_token = \n"
-                + "bot_owners = []\n"
+                + "bot_owners = \n"
                 + "bot_server = \n"
             )
         exit(1)
