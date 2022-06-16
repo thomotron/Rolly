@@ -286,74 +286,83 @@ def sheets_commit_changes():
     """
     locked = False
     try:
-        # Gain exclusive access to the Sheets queue
-        if sheets_queue_lock.acquire(blocking=True):
-            locked = True
-        else:
-            raise Exception("Unable to acquire lock on Sheets queue")
-
         # Don't do anything if we're called too early or there's nothing queued
         if datetime.now() <= sheets_next_request_after or not sheets_queued_changes:
             return
 
         try:
             # Try match each of the requested changes to cells within the ranges we are permitted to operate upon
-            requests = []
-            for range in google_sheet_ranges.split():
-                sheet_response = (
-                    sheets.values()
-                    .get(spreadsheetId=google_sheet_id, range=range)
-                    .execute()
+            sheet_response = (
+                sheets.values()
+                .batchGet(
+                    spreadsheetId=google_sheet_id, ranges=google_sheet_ranges.split()
                 )
-                sheet_values = sheet_response.get("values", [])
+                .execute()
+            )
+            value_ranges = sheet_response.get("valueRanges", [])
 
+            requests = []
+            for value_range in value_ranges:
                 # Make sure we got something
-                if not sheet_values:
-                    print(GOOGLE_PREFIX + "No data found for range {}".format(range))
+                if not value_range["values"]:
+                    print(
+                        GOOGLE_PREFIX
+                        + "No data found for range {}".format(value_range["range"])
+                    )
                     continue
 
                 # Get the x and y origin offset for this range
-                x_offset, y_offset = parse_a1_coords(range.split(":")[0])
+                x_offset, y_offset = parse_a1_coords(value_range["range"].split(":")[0])
 
-                # Iterate over each of the changes to be made
-                for pair in sheets_queued_changes:
-                    # Try find the target name within the range
-                    for y, row in enumerate(sheet_values):
-                        for x, value in enumerate(row):
-                            if value and value.lower() in pair["name"].lower():
-                                # Find the boundary of this cell
-                                column_start = x_offset + x
-                                column_end = x_offset + x + 1
-                                row_start = y_offset + y
-                                row_end = y_offset + y + 1
+                # Gain exclusive access to the Sheets queue
+                if not sheets_queue_lock.acquire(blocking=True):
+                    raise Exception("Unable to acquire lock on Sheets queue")
+                else:
+                    locked = True
 
-                                # Convert the hex string to RGB values
-                                red, green, blue = bytes.fromhex(pair["colour"])
+                    # Iterate over each of the changes to be made
+                    for pair in sheets_queued_changes:
+                        # Try find the target name within the range
+                        for y, row in enumerate(value_range["values"]):
+                            for x, value in enumerate(row):
+                                if value and value.lower() in pair["name"].lower():
+                                    # Find the boundary of this cell
+                                    column_start = x_offset + x
+                                    column_end = x_offset + x + 1
+                                    row_start = y_offset + y
+                                    row_end = y_offset + y + 1
 
-                                # Make a request to change this cell's background colour to the one requested
-                                requests.append(
-                                    {
-                                        "repeatCell": {
-                                            "range": {
-                                                "startColumnIndex": column_start,
-                                                "endColumnIndex": column_end,
-                                                "startRowIndex": row_start,
-                                                "endRowIndex": row_end,
-                                                "sheetId": 0,
-                                            },
-                                            "cell": {
-                                                "userEnteredFormat": {
-                                                    "backgroundColor": {
-                                                        "red": red / 255,
-                                                        "green": green / 255,
-                                                        "blue": blue / 255,
+                                    # Convert the hex string to RGB values
+                                    red, green, blue = bytes.fromhex(pair["colour"])
+
+                                    # Make a request to change this cell's background colour to the one requested
+                                    requests.append(
+                                        {
+                                            "repeatCell": {
+                                                "range": {
+                                                    "startColumnIndex": column_start,
+                                                    "endColumnIndex": column_end,
+                                                    "startRowIndex": row_start,
+                                                    "endRowIndex": row_end,
+                                                    "sheetId": 0,
+                                                },
+                                                "cell": {
+                                                    "userEnteredFormat": {
+                                                        "backgroundColor": {
+                                                            "red": red / 255,
+                                                            "green": green / 255,
+                                                            "blue": blue / 255,
+                                                        }
                                                     }
-                                                }
-                                            },
-                                            "fields": "UserEnteredFormat(BackgroundColor)",
+                                                },
+                                                "fields": "UserEnteredFormat(BackgroundColor)",
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+
+                    # Release queue lock
+                    sheets_queue_lock.release()
+                    locked = False
         except Exception as e:
             # Delay next execution exponentially up to 32s
             sheets_increment_retry_delay()
