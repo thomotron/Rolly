@@ -33,7 +33,7 @@ discord_bot_server: str = None
 discord_bot_owners: list[str] = []
 sheets = None
 rolly_discord: Client = discord.Client()
-reaction_colours: dict[str, str] = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
+reaction_colours: dict[str, str] = {}
 
 # Protect concurrency of sheets_queued_changes, sheets_next_request_after, and sheets_retries
 sheets_queue_lock: RLock = RLock()
@@ -92,7 +92,7 @@ def init_from_config():
     """
     Reads in config and applies it to the corresponding globals.
     """
-    global config, google_id, google_secret, google_redirect, google_sheet_id, google_sheet_ranges, discord_id, discord_bot_token, discord_bot_server, discord_bot_owners
+    global config, google_id, google_secret, google_redirect, google_sheet_id, google_sheet_ranges, discord_id, discord_bot_token, discord_bot_server, discord_bot_owners, reaction_colours
 
     # Read in our ID and secret from config
     config = ConfigParser()
@@ -115,6 +115,7 @@ def init_from_config():
                 + "bot_token = \n"
                 + "bot_owners = \n"
                 + "bot_server = \n"
+                + "emoji_colours = \n"
             )
         exit(1)
 
@@ -157,6 +158,15 @@ def init_from_config():
     except KeyError:
         print("Couldn't read bot owners, defaulting to none")
         discord_bot_owners = []
+    try:
+        for pair in config["Discord"]["reaction_colours"].split():
+            reaction, colour = pair.split(":")
+            reaction_colours[reaction] = colour
+    except KeyError:
+        print(
+            "Couldn't read reaction/colour mapping, defaulting to %s" % reaction_colours
+        )
+        reaction_colours = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
 
 
 def google_refresh_tokens():
