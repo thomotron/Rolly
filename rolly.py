@@ -115,7 +115,7 @@ def init_from_config():
                 + "bot_token = \n"
                 + "bot_owners = \n"
                 + "bot_server = \n"
-                + "emoji_colours = \n"
+                + "reaction_colours = \n"
             )
         exit(1)
 
