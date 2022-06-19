@@ -495,6 +495,7 @@ async def on_message(message):
         # Declare some globals
         global google_sheet_ranges
         global google_sheet_id
+        global discord_roll_call_channel
 
         # Filter what command came through
         if args[0] == "help":
@@ -506,14 +507,25 @@ async def on_message(message):
                 + "`setsheet` - Sets the Google Sheet ID to update\n"
                 + "`ranges` - Shows the current allowed ranges in the spreadsheet\n"
                 + "`addranges` - Add one or more allowed ranges for the spreadsheet\n"
-                + "`setranges` - Sets the ranges to update in the spreadsheet"
+                + "`setranges` - Sets the ranges to update in the spreadsheet\n"
+                + "`channel` - Shows or sets the channel to create roll calls in"
             )
 
         elif args[0] == "create":
-            if len(args) > 1:
-                await setup(message.channel, " ".join(args[1:]))
+            channel = message.channel
+            if discord_roll_call_channel:
+                channel = rolly_discord.get_channel(int(discord_roll_call_channel))
+
+            if not channel:
+                print(
+                    "Failed to get destination channel with ID %s, cannot create roll call"
+                    % discord_roll_call_channel
+                )
             else:
-                await setup(message.channel)
+                if len(args) > 1:
+                    await setup(channel, " ".join(args[1:]))
+                else:
+                    await setup(channel)
 
         elif args[0] == "setsheet":
             # Make sure we've been given an ID
@@ -578,6 +590,34 @@ async def on_message(message):
                 # Update and write config to file
                 config["Google"]["sheet_ranges"] = " ".join(args[1:])
                 google_sheet_ranges = " ".join(args[1:])
+                with open(config_path, "w") as file:
+                    config.write(file)
+
+        elif args[0] == "channel":
+            # Make sure we've gotten a channel
+            if len(args) < 2 or (
+                args[1].lower() != "none" and not message.channel_mentions
+            ):
+                # Report back what the current setting is and how to change it
+                current_setting_str = (
+                    "<#{}>".format(discord_roll_call_channel)
+                    if discord_roll_call_channel
+                    else "whichever channel a roll call is created in"
+                )
+                await message.channel.send(
+                    "Currently roll calls will be sent in {}.\nMention a channel to set it, or use `none` to use whichever channel a roll call is created in.".format(
+                        current_setting_str
+                    ),
+                    delete_after=30,
+                )
+            else:
+                new_channel = None
+                if args[1].lower() == "none":
+                    new_channel = ""
+                else:
+                    new_channel = str(message.channel_mentions[0].id)
+                config["Discord"]["roll_call_channel"] = new_channel
+                discord_roll_call_channel = new_channel
                 with open(config_path, "w") as file:
                     config.write(file)
 
