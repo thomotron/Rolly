@@ -31,6 +31,7 @@ discord_id: str = None
 discord_bot_token: str = None
 discord_bot_server: str = None
 discord_bot_owners: list[str] = []
+discord_roll_call_channel: str = None
 sheets = None
 rolly_discord: Client = discord.Client()
 reaction_colours: dict[str, str] = {}
@@ -92,7 +93,7 @@ def init_from_config():
     """
     Reads in config and applies it to the corresponding globals.
     """
-    global config, google_id, google_secret, google_redirect, google_sheet_id, google_sheet_ranges, discord_id, discord_bot_token, discord_bot_server, discord_bot_owners, reaction_colours
+    global config, google_id, google_secret, google_redirect, google_sheet_id, google_sheet_ranges, discord_id, discord_bot_token, discord_bot_server, discord_bot_owners, discord_roll_call_channel, reaction_colours
 
     # Read in our ID and secret from config
     config = ConfigParser()
@@ -116,6 +117,7 @@ def init_from_config():
                 + "bot_owners = \n"
                 + "bot_server = \n"
                 + "reaction_colours = \n"
+                + "roll_call_channel = \n"
             )
         exit(1)
 
@@ -167,6 +169,10 @@ def init_from_config():
             "Couldn't read reaction/colour mapping, defaulting to %s" % reaction_colours
         )
         reaction_colours = {"✅": "00ff00", "❔": "ffff00", "❌": "ff0000"}
+    try:
+        discord_roll_call_channel = config["Discord"]["roll_call_channel"]
+    except KeyError:
+        print("Couldn't read roll call channel, defaulting to none")
 
 
 def google_refresh_tokens():
