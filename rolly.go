@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"github.com/BurntSushi/toml"
 	"github.com/bwmarrin/discordgo"
@@ -552,8 +553,12 @@ func saveToken(path string, token *oauth2.Token) {
 }
 
 func main() {
+	// Parse args
+	var configPath string
+	flag.StringVar(&configPath, "config", "config.toml", "Path to the config file")
+	flag.Parse()
+
 	// Try loading config
-	configPath := "config.toml"
 	_config, loadErr := loadConfig(configPath)
 	if loadErr != nil {
 		if errors.Is(loadErr, os.ErrNotExist) {
