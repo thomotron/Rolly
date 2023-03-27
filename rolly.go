@@ -628,6 +628,7 @@ func processQueue(queue <-chan NameColourUpdate, sheetsService *sheets.Service, 
 		x, y, err := findNameCell(sheetsService, sheetID, item.Name, sheetRanges...)
 		if err != nil {
 			// Couldn't find the name, skip it
+			fmt.Fprintf(os.Stderr, "Couldn't find %s in the sheet: %v\n", item.Name, err)
 			continue
 		}
 
