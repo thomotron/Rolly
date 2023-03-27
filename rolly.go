@@ -38,8 +38,13 @@ type Config struct {
 		BotOwners         []string
 		BotServer         string
 		RollCallChannelID string
-		ReactionColours   map[string]string
+		ReactionColours   map[string]ColourPriority
 	}
+}
+
+type ColourPriority struct {
+	Colour   string
+	Priority int
 }
 
 type NameColourUpdate struct {
@@ -82,7 +87,6 @@ var commands = []*SlashCommand{
 		},
 	},
 	{
-		// TODO: Keep the original message for reference when creating roll call
 		Command: &discordgo.ApplicationCommand{
 			Name:        "create",
 			Description: "Creates a new roll call message",
@@ -430,6 +434,21 @@ var commands = []*SlashCommand{
 func loadConfig(path string) (*Config, error) {
 	var config Config
 
+	// Set defaults
+	if len(config.Discord.ReactionColours) == 0 {
+		config.Discord.ReactionColours = map[string]ColourPriority{
+			"✅": {Colour: "00ff00", Priority: 1},
+			"❔": {Colour: "ffff00", Priority: 2},
+			"❌": {Colour: "ff0000", Priority: 3},
+		}
+	}
+	if config.Google.CredentialsPath == "" {
+		config.Google.CredentialsPath = "credentials.json"
+	}
+	if config.Google.TokenPath == "" {
+		config.Google.TokenPath = "token.json"
+	}
+
 	// Try read in from the given path
 	_, err := toml.DecodeFile(path, &config)
 	if err != nil {
@@ -445,21 +464,6 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if config.Discord.BotServer == "" {
 		return &config, errors.New("missing Discord server ID")
-	}
-
-	// Set defaults
-	if len(config.Discord.ReactionColours) == 0 {
-		config.Discord.ReactionColours = map[string]string{
-			"✅": "00ff00",
-			"❔": "ffff00",
-			"❌": "ff0000",
-		}
-	}
-	if config.Google.CredentialsPath == "" {
-		config.Google.CredentialsPath = "credentials.json"
-	}
-	if config.Google.TokenPath == "" {
-		config.Google.TokenPath = "token.json"
 	}
 
 	// Parse computed values
@@ -837,20 +841,23 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		}
 
 		if value, exists := (*config).Discord.ReactionColours[e.Emoji.Name]; exists {
+			fmt.Printf("%s reacted with '%s', changing their cell to %s\n", e.Member.Nick, e.MessageReaction.Emoji.Name, value.Colour)
+
 			// Add name to the update queue
 			updateQueue <- NameColourUpdate{
 				Name:   e.Member.Nick,
-				Colour: value,
+				Colour: value.Colour,
 			}
 		} else {
 			// No matching emoji, nothing to do
+			fmt.Fprintf(os.Stderr, "%s reacted with unsupported emoji '%s'\n", e.Member.Nick, e.MessageReaction.Emoji.Name)
 			return
 		}
 	})
 
 	// Register emote removed
 	session.AddHandler(func(s *discordgo.Session, e *discordgo.MessageReactionRemove) {
-		user, err := s.User(e.UserID)
+		member, err := s.GuildMember(e.GuildID, e.UserID)
 		if err != nil {
 			// Can't do anything without a user ID
 			return
@@ -859,26 +866,59 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		// Get the message to check if there are any other emoji from this user
 		message, err := s.ChannelMessage(e.ChannelID, e.MessageID)
 		if err != nil {
-			// Can't find anything
+			fmt.Fprintf(os.Stderr, "Failed getting message that emoji was removed from: %v", err)
 			return
 		}
 
-		// Try pull out a matching colour from the reaction colour list
-		// This method of checking has problems with determining the priority of each reaction colour, as not only does
-		// the message add them in a random order, but so does this iteration.
-		// TODO: Find a better way of maintaining the order of the reaction colour list
-		var matchedColour = "FFFFFF" // Default to white
+		// Try pull out the next best matching colour from the reaction colour list, if there is one
+		lowestPriority := -1
+		matchedEmoji := ""
+		matchedColour := "FFFFFF" // Default to white
 		for _, reaction := range message.Reactions {
-			if colour, exists := (*config).Discord.ReactionColours[reaction.Emoji.Name]; exists {
-				matchedColour = colour
+			// Reactions are returned in the order of occurrence on the message
+			// Skip reactions that we don't have colours for
+			var colourPriority ColourPriority
+			if value, exists := config.Discord.ReactionColours[reaction.Emoji.Name]; exists {
+				colourPriority = value
+			} else {
+				fmt.Fprintf(os.Stderr, "Unknown emoji '%s'\n", reaction.Emoji.Name)
+				continue
 			}
+
+			// Get the users that have reacted
+			users, err := s.MessageReactions(message.ChannelID, message.ID, reaction.Emoji.Name, 100, "", "")
+			if err != nil {
+				// Couldn't get the user list
+				fmt.Fprintf(os.Stderr, "Failed getting list of users who reacted with a '%s' emoji: %v\n", reaction.Emoji.Name, err)
+				continue
+			}
+
+			// Check if the user has reacted to this reaction as well
+			// If it's a lower priority than the last one we'd found, then use this as the new colour
+			for _, reactionUser := range users {
+				if reactionUser.ID == member.User.ID {
+					if colourPriority.Priority < lowestPriority || lowestPriority == -1 {
+						lowestPriority = colourPriority.Priority
+						matchedColour = colourPriority.Colour
+						matchedEmoji = reaction.Emoji.Name
+						break
+					}
+				}
+			}
+		}
+
+		if matchedEmoji != "" {
+			fmt.Printf("%s removed their '%s' react, but they still have a '%s' react. Changing their cell to %s\n", member.Nick, e.MessageReaction.Emoji.Name, matchedEmoji, matchedColour)
+		} else {
+			fmt.Printf("%s removed their '%s' react, changing their cell to %s\n", member.Nick, e.MessageReaction.Emoji.Name, matchedColour)
 		}
 
 		// Add name to the update queue
 		updateQueue <- NameColourUpdate{
-			Name:   user.Username,
+			Name:   member.Nick,
 			Colour: matchedColour,
 		}
+
 	})
 
 	// Register all emotes removed
