@@ -701,7 +701,7 @@ func findNameCell(sheets *sheets.Service, sheetID string, name string, ranges ..
 
 		for majorIndex, majorDimension := range valueRange.Values {
 			for minorIndex, cell := range majorDimension {
-				if cellValue, isString := cell.(string); isString && cellValue != "" && strings.Contains(name, cellValue) {
+				if cellValue, isString := cell.(string); isString && cellValue != "" && strings.Contains(strings.TrimSpace(name), strings.TrimSpace(cellValue)) {
 					// Found a match
 					// Now figure out whether we were iterating horizontally or vertically to apply the appropriate
 					// offsets
