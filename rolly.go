@@ -701,7 +701,17 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 	// Register emote added
 	session.AddHandler(func(s *discordgo.Session, e *discordgo.MessageReactionAdd) {
 		// Ignore our own emoji events
-		if session.State.User.ID == e.Member.User.ID {
+		if e.Member.User.ID == session.State.User.ID {
+			return
+		}
+
+		// Ignore events for messages other than our own
+		message, err := s.ChannelMessage(e.ChannelID, e.MessageID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed getting message that emoji was added to: %v", err)
+			return
+		}
+		if message.Member.User.ID != session.State.User.ID {
 			return
 		}
 
@@ -732,6 +742,11 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		message, err := s.ChannelMessage(e.ChannelID, e.MessageID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed getting message that emoji was removed from: %v", err)
+			return
+		}
+
+		// Ignore events for messages other than our own
+		if message.Member.User.ID != session.State.User.ID {
 			return
 		}
 
