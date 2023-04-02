@@ -723,7 +723,7 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 			fmt.Fprintf(os.Stderr, "Failed getting message that emoji was added to: %v", err)
 			return
 		}
-		if message.Member.User.ID != s.State.User.ID {
+		if message.Author.ID != s.State.User.ID {
 			return
 		}
 
@@ -758,7 +758,7 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		}
 
 		// Ignore events for messages other than our own
-		if message.Member.User.ID != s.State.User.ID {
+		if message.Author.ID != s.State.User.ID {
 			return
 		}
 
