@@ -28,12 +28,13 @@ type Config struct {
 	}
 
 	Discord struct {
-		ApplicationID     string
-		BotToken          string
-		BotOwners         []string
-		BotServer         string
-		RollCallChannelID string
-		ReactionColours   map[string]ColourPriority
+		ApplicationID      string
+		BotToken           string
+		BotOwners          []string
+		BotServer          string
+		RollCallChannelID  string
+		ReactionColours    map[string]ColourPriority
+		NamesCaseSensitive bool
 	}
 }
 
@@ -429,7 +430,8 @@ var commands = []*SlashCommand{
 func loadConfig(path string) (*Config, error) {
 	var config Config
 
-	// Set defaults
+	// Try read in from the given path and set defaults
+	_, err := toml.DecodeFile(path, &config)
 	if len(config.Discord.ReactionColours) == 0 {
 		config.Discord.ReactionColours = map[string]ColourPriority{
 			"✅": {Colour: "00ff00", Priority: 1},
@@ -444,8 +446,7 @@ func loadConfig(path string) (*Config, error) {
 		config.Google.TokenPath = "token.json"
 	}
 
-	// Try read in from the given path
-	_, err := toml.DecodeFile(path, &config)
+	// Stop here if the TOML decode failed earlier
 	if err != nil {
 		return &config, err
 	}
@@ -639,17 +640,28 @@ func findNameCell(sheets *sheets.Service, sheetID string, name string, ranges ..
 
 		for majorIndex, majorDimension := range valueRange.Values {
 			for minorIndex, cell := range majorDimension {
-				if cellValue, isString := cell.(string); isString && cellValue != "" && strings.Contains(strings.TrimSpace(name), strings.TrimSpace(cellValue)) {
-					// Found a match
-					// Now figure out whether we were iterating horizontally or vertically to apply the appropriate
-					// offsets
-					if valueRange.MajorDimension == "COLUMNS" {
-						// Outer iterator was per column
-						return xOffset + majorIndex, yOffset + minorIndex, nil
-					} else /*if valueRange.MajorDimension == "ROWS"*/ { // Always default to rows as this is standard
-						// Outer iterator was per row
-						return xOffset + minorIndex, yOffset + majorIndex, nil
+				if cellValue, isString := cell.(string); isString && cellValue != "" {
+					// Clean up the values a bit
+					cellValue = strings.TrimSpace(cellValue)
+					name = strings.TrimSpace(name)
+					if !config.Discord.NamesCaseSensitive {
+						cellValue = strings.ToLower(cellValue)
+						name = strings.ToLower(name)
 					}
+
+					if strings.Contains(name, cellValue) {
+						// Found a match
+						// Now figure out whether we were iterating horizontally or vertically to apply the appropriate
+						// offsets
+						if valueRange.MajorDimension == "COLUMNS" {
+							// Outer iterator was per column
+							return xOffset + majorIndex, yOffset + minorIndex, nil
+						} else /*if valueRange.MajorDimension == "ROWS"*/ { // Always default to rows as this is standard
+							// Outer iterator was per row
+							return xOffset + minorIndex, yOffset + majorIndex, nil
+						}
+					}
+
 				}
 			}
 		}
