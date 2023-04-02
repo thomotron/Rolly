@@ -706,7 +706,7 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		}
 
 		if value, exists := (*config).Discord.ReactionColours[e.Emoji.Name]; exists {
-			fmt.Printf("%s reacted with '%s', changing their cell to %s\n", e.Member.Nick, e.MessageReaction.Emoji.Name, value.Colour)
+			fmt.Printf("%s (%s#%s) reacted with '%s', changing their cell to %s\n", e.Member.Nick, e.Member.User.Username, e.Member.User.Discriminator, e.MessageReaction.Emoji.Name, value.Colour)
 
 			// Add name to the update queue
 			updateQueue <- NameColourUpdate{
@@ -715,7 +715,7 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 			}
 		} else {
 			// No matching emoji, nothing to do
-			fmt.Fprintf(os.Stderr, "%s reacted with unsupported emoji '%s'\n", e.Member.Nick, e.MessageReaction.Emoji.Name)
+			fmt.Fprintf(os.Stderr, "%s (%s#%s) reacted with unsupported emoji '%s'\n", e.Member.Nick, e.Member.User.Username, e.Member.User.Discriminator, e.MessageReaction.Emoji.Name)
 			return
 		}
 	})
@@ -773,9 +773,9 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 		}
 
 		if matchedEmoji != "" {
-			fmt.Printf("%s removed their '%s' react, but they still have a '%s' react. Changing their cell to %s\n", member.Nick, e.MessageReaction.Emoji.Name, matchedEmoji, matchedColour)
+			fmt.Printf("%s (%s#%s) removed their '%s' react, but they still have a '%s' react. Changing their cell to %s\n", member.Nick, member.User.Username, member.User.Discriminator, e.MessageReaction.Emoji.Name, matchedEmoji, matchedColour)
 		} else {
-			fmt.Printf("%s removed their '%s' react, changing their cell to %s\n", member.Nick, e.MessageReaction.Emoji.Name, matchedColour)
+			fmt.Printf("%s (%s#%s) removed their '%s' react, changing their cell to %s\n", member.Nick, member.User.Username, member.User.Discriminator, e.MessageReaction.Emoji.Name, matchedColour)
 		}
 
 		// Add name to the update queue
@@ -783,7 +783,6 @@ func registerDiscordEvents(session *discordgo.Session, config *Config, updateQue
 			Name:   member.Nick,
 			Colour: matchedColour,
 		}
-
 	})
 
 	// Register all emotes removed
