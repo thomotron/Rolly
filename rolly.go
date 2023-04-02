@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/sheets/v4"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -28,13 +29,14 @@ type Config struct {
 	}
 
 	Discord struct {
-		ApplicationID      string
-		BotToken           string
-		BotOwners          []string
-		BotServer          string
-		RollCallChannelID  string
-		ReactionColours    map[string]ColourPriority
-		NamesCaseSensitive bool
+		ApplicationID         string
+		BotToken              string
+		BotOwners             []string
+		BotServer             string
+		RollCallChannelID     string
+		ReactionColours       map[string]ColourPriority
+		reactionColoursSorted []string
+		NamesCaseSensitive    bool
 	}
 }
 
@@ -158,7 +160,7 @@ var commands = []*SlashCommand{
 			}
 
 			// Add reactions to the message
-			for emoji := range (*config).Discord.ReactionColours {
+			for _, emoji := range config.Discord.reactionColoursSorted {
 				err = session.MessageReactionAdd(channel.ID, message.ID, emoji)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Failed adding %v emoji to roll call message: %v\n", emoji, err)
@@ -446,6 +448,21 @@ func loadConfig(path string) (*Config, error) {
 		config.Google.TokenPath = "token.json"
 	}
 
+	// Parse computed values
+	config.Google.sheetRanges = set.NewSet[string]()
+	for _, sheetRange := range config.Google.SheetRangesSlice {
+		config.Google.sheetRanges.Add(sheetRange)
+	}
+
+	var reactionColoursSorted []string
+	for emoji := range config.Discord.ReactionColours {
+		reactionColoursSorted = append(reactionColoursSorted, emoji)
+	}
+	sort.SliceStable(reactionColoursSorted, func(i int, j int) bool {
+		return config.Discord.ReactionColours[reactionColoursSorted[i]].Priority < config.Discord.ReactionColours[reactionColoursSorted[j]].Priority
+	})
+	config.Discord.reactionColoursSorted = reactionColoursSorted
+
 	// Stop here if the TOML decode failed earlier
 	if err != nil {
 		return &config, err
@@ -460,12 +477,6 @@ func loadConfig(path string) (*Config, error) {
 	}
 	if config.Discord.BotServer == "" {
 		return &config, errors.New("missing Discord server ID")
-	}
-
-	// Parse computed values
-	config.Google.sheetRanges = set.NewSet[string]()
-	for _, sheetRange := range config.Google.SheetRangesSlice {
-		config.Google.sheetRanges.Add(sheetRange)
 	}
 
 	return &config, nil
