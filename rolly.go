@@ -37,6 +37,7 @@ type Config struct {
 		ReactionColours       map[string]ColourPriority
 		reactionColoursSorted []string
 		NamesCaseSensitive    bool
+		MinNameLength         int
 	}
 }
 
@@ -660,7 +661,7 @@ func findNameCell(sheets *sheets.Service, sheetID string, name string, ranges ..
 						name = strings.ToLower(name)
 					}
 
-					if strings.Contains(name, cellValue) {
+					if len(cellValue) > config.Discord.MinNameLength && strings.Contains(name, cellValue) {
 						// Found a match
 						// Now figure out whether we were iterating horizontally or vertically to apply the appropriate
 						// offsets
