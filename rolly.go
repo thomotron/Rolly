@@ -429,7 +429,8 @@ var commands = []*SlashCommand{
 func loadConfig(path string) (*Config, error) {
 	var config Config
 
-	// Set defaults
+	// Try read in from the given path and set defaults
+	_, err := toml.DecodeFile(path, &config)
 	if len(config.Discord.ReactionColours) == 0 {
 		config.Discord.ReactionColours = map[string]ColourPriority{
 			"✅": {Colour: "00ff00", Priority: 1},
@@ -444,8 +445,7 @@ func loadConfig(path string) (*Config, error) {
 		config.Google.TokenPath = "token.json"
 	}
 
-	// Try read in from the given path
-	_, err := toml.DecodeFile(path, &config)
+	// Stop here if the TOML decode failed earlier
 	if err != nil {
 		return &config, err
 	}
